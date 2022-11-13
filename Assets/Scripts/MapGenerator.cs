@@ -1,0 +1,27 @@
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+
+/// <summary>
+/// This script is used to generate a noise map that can be applied to another object.
+/// Source: https://www.youtube.com/watch?v=WP-Bm65Q-1Y a youtube series by Sebastian Lague
+/// </summary>
+public class MapGenerator : MonoBehaviour
+{
+    public int mapWidth;
+    public int mapHeight;
+    public float noiseScale;
+
+    public bool autoUpdate;
+
+    /// <summary>
+    /// Calls the <c>GenerateNoiseMap</c> method with the given parameters and applys it to a display
+    /// </summary>
+    public void GenerateMap()
+    {
+        float[,] noiseMap = Noise.GenerateNoiseMap(mapWidth, mapHeight, noiseScale);
+
+        MapDisplay display = FindObjectOfType<MapDisplay>();
+        display.DrawNoiseMap(noiseMap);
+    }
+}
