@@ -12,6 +12,14 @@ public class MapGenerator : MonoBehaviour
     public int mapHeight;
     public float noiseScale;
 
+    public int octaves;
+    public float persistance;
+    public float lacunarity;
+
+    public int seed;
+    // offset that can be changed by the user
+    public Vector2 offset;
+
     public bool autoUpdate;
 
     /// <summary>
@@ -19,7 +27,7 @@ public class MapGenerator : MonoBehaviour
     /// </summary>
     public void GenerateMap()
     {
-        float[,] noiseMap = Noise.GenerateNoiseMap(mapWidth, mapHeight, noiseScale);
+        float[,] noiseMap = Noise.GenerateNoiseMap(mapWidth, mapHeight, seed, noiseScale, octaves, persistance, lacunarity, offset);
 
         MapDisplay display = FindObjectOfType<MapDisplay>();
         display.DrawNoiseMap(noiseMap);
