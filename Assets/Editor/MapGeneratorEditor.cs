@@ -1,9 +1,12 @@
 using System.Collections;
 using System.Collections.Generic;
+using System.Threading;
+using System.Timers;
 using UnityEditor;
 using UnityEngine;
 
-[CustomEditor (typeof (MapGenerator))]  
+[CustomEditor (typeof (MapGenerator))]
+[InitializeOnLoad]
 /// <summary>
 /// Used to edit the noise map during run time. 
 /// Source: https://www.youtube.com/watch?v=WP-Bm65Q-1Y a youtube series by Sebastian Lague

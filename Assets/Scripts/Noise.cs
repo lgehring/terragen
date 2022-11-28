@@ -20,7 +20,7 @@ public static class Noise
     /// <param name="offset"> An extra offset applied by the user</param>
     /// <returns> A noise map using perlin noise</returns>
     public static float[,] GenerateNoiseMap(int mapWidth, int mapHeight, int seed, float scale, int octaves,
-        float persistance, float lacunartiy, Vector2 offset)
+        float persistance, float lacunartiy, Vector2 offset, bool addSystemTimeToSeed)
     {
         var noiseMap = new float[mapWidth, mapHeight];
 
@@ -32,6 +32,12 @@ public static class Noise
             // The magic numbers -100000 to 100000 seem to be the perfect interval
             var offsetX = prng.Next(-100000, 100000) + offset.x;
             var offsetY = prng.Next(-100000, 100000) + offset.y;
+
+            if (addSystemTimeToSeed)
+            {
+                offsetX += (float) Time.unscaledTimeAsDouble;
+                offsetY += (float) Time.unscaledTimeAsDouble;
+            }
             octaveOffsets[i] = new Vector2(offsetX, offsetY);
         }
 

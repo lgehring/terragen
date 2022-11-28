@@ -27,6 +27,8 @@ public class MapGenerator : MonoBehaviour
 
     public int seed;
 
+    public bool addSystemTimeToSeed;
+
     // offset that can be changed by the user
     public Vector2 offset;
     
@@ -51,7 +53,7 @@ public class MapGenerator : MonoBehaviour
     public void GenerateMap()
     {
         var noiseMap = Noise.GenerateNoiseMap(mapChunkSize, mapChunkSize, seed, noiseScale, octaves, persistance, lacunarity,
-            offset);
+            offset, addSystemTimeToSeed);
         
         Color[] colorMap = new Color[mapChunkSize * mapChunkSize];
         for (int y = 0; y < mapChunkSize; y++)
@@ -78,7 +80,15 @@ public class MapGenerator : MonoBehaviour
         else if (drawMode == DrawMode.Mesh)
             display.DrawMesh(MeshGenerator.GenerateTerrainMesh(noiseMap, meshHeightMultiplier, meshHeightCurve, levelOfDetail), TextureGenerator.TextureFromColorMap(colorMap, mapChunkSize, mapChunkSize));
     }
-    
+
+    private void Update()
+    {
+        if (addSystemTimeToSeed)
+        {
+            GenerateMap();
+        }
+    }
+
     [System.Serializable]
     public struct TerrainType
     {
