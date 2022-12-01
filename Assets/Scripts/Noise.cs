@@ -1,3 +1,4 @@
+using UnityEditor.PackageManager.UI;
 using UnityEngine;
 using Random = System.Random;
 
@@ -20,7 +21,7 @@ public static class Noise
     /// <param name="offset"> An extra offset applied by the user</param>
     /// <returns> A noise map using perlin noise</returns>
     public static float[,] GenerateNoiseMap(int mapWidth, int mapHeight, int seed, float scale, int octaves,
-        float persistance, float lacunartiy, Vector2 offset, bool addSystemTimeToSeed)
+        float persistance, float lacunartiy, Vector2 offset, bool addSystemTimeToSeed, float warpingStrenght)
     {
         var noiseMap = new float[mapWidth, mapHeight];
 
@@ -35,8 +36,8 @@ public static class Noise
 
             if (addSystemTimeToSeed)
             {
-                offsetX += (float) Time.unscaledTimeAsDouble;
-                offsetY += (float) Time.unscaledTimeAsDouble;
+                offsetX *= Mathf.Sin((float) Time.unscaledTimeAsDouble/100000.0f);
+                offsetY /= Mathf.Cos((float) Time.unscaledTimeAsDouble/100000.0f);
             }
             octaveOffsets[i] = new Vector2(offsetX, offsetY);
         }
@@ -62,19 +63,21 @@ public static class Noise
             float frequency = 1;
             float noiseHeight = 0;
 
+                // domain warping
             for (var i = 0; i < octaves; ++i)
             {
-                // Create a sample for perlin noise
-                var sampleX = (x - halfWidth) / scale * frequency + octaveOffsets[i].x;
-                var sampleY = (y - halfHeight) / scale * frequency + octaveOffsets[i].y;
+                var sampleX = (x - halfWidth)/scale * frequency + octaveOffsets[i].x;
+                var sampleY = (y - halfHeight)/scale * frequency + octaveOffsets[i].y;
 
-                // Perlin noise generation
-                // Generating values between -1 and 1
-                var perlinValue = Mathf.PerlinNoise(sampleX, sampleY) * 2 - 1;
+                float[] q = new float[2] {Mathf.PerlinNoise(sampleX, sampleY),Mathf.PerlinNoise(sampleX+5.2f,sampleY+1.3f)};
 
-                noiseHeight += perlinValue * amplitued;
+                float[] r = new float[2] {Mathf.PerlinNoise(sampleX + warpingStrenght * q[0] + 1.7f, sampleY + warpingStrenght * q[0] + 9.2f),
+                                          Mathf.PerlinNoise(sampleX + warpingStrenght * q[0] + 8.3f, sampleX + warpingStrenght * q[0] + 2.8f)};
+
+                noiseHeight += Mathf.PerlinNoise(sampleX + warpingStrenght * r[0], sampleY + warpingStrenght * r[1]) * amplitued;
 
                 amplitued *= persistance;
+
                 frequency *= lacunartiy;
             }
 

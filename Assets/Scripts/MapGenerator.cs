@@ -39,6 +39,8 @@ public class MapGenerator : MonoBehaviour
     
     public TerrainType[] regions;
 
+    public float warpingStrength;
+
     private void OnValidate()
     {
         if (lacunarity < 1)
@@ -53,7 +55,7 @@ public class MapGenerator : MonoBehaviour
     public void GenerateMap()
     {
         var noiseMap = Noise.GenerateNoiseMap(mapChunkSize, mapChunkSize, seed, noiseScale, octaves, persistance, lacunarity,
-            offset, addSystemTimeToSeed);
+            offset, addSystemTimeToSeed, warpingStrength);
         
         Color[] colorMap = new Color[mapChunkSize * mapChunkSize];
         for (int y = 0; y < mapChunkSize; y++)
