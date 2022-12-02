@@ -26,14 +26,14 @@ public class MapGeneratorEditor : Editor
             // allows the Generator of the map to auto update
             if (mapGen.autoUpdate)
             {
-                mapGen.GenerateMap();
+                mapGen.DrawMapInEditor();
             }
         }
 
         // Creats a button that say generate and generates a noise map texture if the button is pressed
         if (GUILayout.Button("Generate"))
         {
-            mapGen.GenerateMap();
+            mapGen.DrawMapInEditor();
         }
     }
 }
