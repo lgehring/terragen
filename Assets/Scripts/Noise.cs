@@ -76,12 +76,12 @@ public static class Noise
                     var sampleX = (x - halfWidth + octaveOffsets[i].x) / scale * frequency;
                     var sampleY = (y - halfHeight + octaveOffsets[i].y) / scale * frequency;
 
-                    float[] q = new float[2] { Mathf.PerlinNoise(sampleX, sampleY), Mathf.PerlinNoise(sampleX + 5.2f, sampleY + 1.3f) };
+                    float[] q = new float[2] { Mathf.PerlinNoise(sampleX, sampleY) * 2 - 1, Mathf.PerlinNoise(sampleX + 5.2f, sampleY + 1.3f) * 2 - 1 };
 
-                    float[] r = new float[2] {Mathf.PerlinNoise(sampleX + warpingStrenght * q[0] + 1.7f, sampleY + warpingStrenght * q[0] + 9.2f),
-                                              Mathf.PerlinNoise(sampleX + warpingStrenght * q[0] + 8.3f, sampleX + warpingStrenght * q[0] + 2.8f)};
+                    float[] r = new float[2] {Mathf.PerlinNoise(sampleX + warpingStrenght * q[0] + 1.7f, sampleY + warpingStrenght * q[0] + 9.2f) * 2 - 1,
+                                              Mathf.PerlinNoise(sampleX + warpingStrenght * q[0] + 8.3f, sampleX + warpingStrenght * q[0] + 2.8f) * 2 - 1};
 
-                    noiseHeight += Mathf.PerlinNoise(sampleX + warpingStrenght * r[0], sampleY + warpingStrenght * r[1]) * amplitude;
+                    noiseHeight += (Mathf.PerlinNoise(sampleX + warpingStrenght * r[0], sampleY + warpingStrenght * r[1]) * 2 - 1) * amplitude;
 
                     amplitude *= persistance;
 
@@ -108,7 +108,7 @@ public static class Noise
                 }
                 else
                 {
-                    float normalizedHeight = noiseMap[x, y] / (maxPossibleHeight / 1.05f);
+                    float normalizedHeight = (noiseMap[x, y] + 1) / (maxPossibleHeight / 0.9f);
                     noiseMap[x, y] = Mathf.Clamp(normalizedHeight, 0, int.MaxValue);
                 }
             }
