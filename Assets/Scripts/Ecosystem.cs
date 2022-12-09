@@ -22,41 +22,48 @@ public class Ecosystem : MonoBehaviour
     public double time;
     private const double DeltaT = 0.5;
     private List<Plant> _plantTemplates;
-    protected internal Mesh heightMapMesh;
+    private Mesh _mesh;
 
     // Awake is called when the script instance is being loaded
     private void Awake()
     {
-        heightMapMesh = new Mesh();
         // Populate plant templates
         _plantTemplates = new List<Plant>
         {
             new Plant(
                 "Grass",
-                Vector2.zero,
+                Vector2.zero, //TODO: calc height here instead of in plant
                 1.0f,
-                3.0f,
+                0.5f,
+                1.5f,
                 5.0f,
                 5,
                 0.0,
                 3.0,
                 "grass",
-                heightMapMesh,
+                _mesh,
                 true),
 
             new Plant(
                 "Tree",
                 Vector2.zero,
                 5.0f,
-                10.0f,
+                3.0f,
+                6.0f,
                 20.0f,
                 1,
                 0.0,
                 5.0,
                 "tree",
-                heightMapMesh,
+                _mesh,
                 true)
         };
+    }
+
+    public void SetMeshData(Mesh mesh)
+    {
+        _mesh = mesh;
+        Debug.Log("Ecosystem mesh set");
     }
 
     // Performs full single step of the ecosystem simulation

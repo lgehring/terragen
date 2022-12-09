@@ -1,3 +1,4 @@
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Threading;
@@ -16,6 +17,7 @@ public class MapGeneratorEditor : Editor
     /// <summary>
     /// Changes what the user sees
     /// </summary>
+
     public override void OnInspectorGUI()
     {
         MapGenerator mapGen = (MapGenerator)target;

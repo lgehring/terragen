@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using Unity.VisualScripting.FullSerializer;
 using UnityEngine;
 
 /// <summary>
@@ -9,8 +10,9 @@ public class Plant
     private Mesh _heightMapMesh;
     private string Name { get; set; }
     protected internal Vector2 Position { get; set; }
-    private float SizeRadiusInternal { get; set; } // Blocking zone for other plants of the same type
-    private float SizeRadiusExternal { get; set; } // Blocking zone for other plants of different types
+    private float SizeRadius { get; set; }
+    private float MinDistIntern { get; set; } // Blocking zone for other plants of the same type
+    private float MinDistExtern { get; set; } // Blocking zone for other plants of different types
     private float SeedingRadius { get; set; }
     private int SeedCount { get; set; }
     private double Viability { get; set; }
@@ -20,32 +22,52 @@ public class Plant
     private bool IsDead { get; set; }
     private GameObject GameObject { get; set; }
     private string PrefabPath { get; set; }
-    private Mesh HeightMapMesh { get; set; }
+    private Mesh Mesh { get; set; }
 
     // Constructor
-    public Plant(string name, Vector2 position, float sizeRadiusInternal, float sizeRadiusExternal, float seedingRadius,
+    public Plant(string name, Vector2 position, float sizeRadius, float minDistIntern, float minDistExtern,
+        float seedingRadius,
         int seedCount, double birthDate,
-        double maxAge, string prefabPath, Mesh heightMapMesh, bool isTemplate = false)
+        double maxAge, string prefabPath, Mesh mesh, bool isTemplate = false)
     {
         Name = name;
         Position = position;
-        SizeRadiusInternal = sizeRadiusInternal;
-        SizeRadiusExternal = sizeRadiusExternal;
+        SizeRadius = sizeRadius;
+        MinDistIntern = minDistIntern;
+        MinDistExtern = minDistExtern;
         SeedingRadius = seedingRadius;
         SeedCount = seedCount;
         BirthDate = birthDate;
         MaxAge = maxAge;
         Age = 0;
         PrefabPath = prefabPath;
-        HeightMapMesh = heightMapMesh;
+        Mesh = mesh;
         if (!isTemplate)
         {
             GameObject = (GameObject)Object.Instantiate(Resources.Load(prefabPath));
-            // TODO: Get height from the heightMapMesh
-            // var height = heightMapMesh.vertices[(int)position.x * heightMapMesh.vertices.GetLength(0) + (int)position.y]
-            //     .y;
-            GameObject.transform.position = new Vector3(position.x, 0, position.y);
+            // Scale game object to fit within the internal size radius of the plant
+            var meshFilter = GameObject.GetComponent<MeshFilter>();
+            var bounds = meshFilter.mesh.bounds;
+            var maxExtent = Mathf.Max(bounds.size.x, bounds.size.z);
+            var scale = SizeRadius / maxExtent;
+            GameObject.transform.localScale = new Vector3(scale, scale, scale);
+            // Set position
+            var height = GetHeightAtPosition(position);
+            GameObject.transform.position = new Vector3(position.x, height, position.y);
         }
+    }
+
+    private float GetHeightAtPosition(Vector2 position)
+    {
+        var height = 0f;
+        var ray = new Ray(new Vector3(position.x, 1000, position.y), Vector3.down);
+        RaycastHit hit;
+        if (Physics.Raycast(ray, out hit))
+        {
+            height = hit.point.y;
+        }
+
+        return height;
     }
 
     // Age the plant and check if it is dead
@@ -73,9 +95,11 @@ public class Plant
                 Random.Range(Position.x - SeedingRadius, Position.x + SeedingRadius),
                 Random.Range(Position.y - SeedingRadius, Position.y + SeedingRadius)
             );
-            var seed = new Plant(Name, seedPosition, SizeRadiusInternal, SizeRadiusExternal, SeedingRadius, SeedCount, BirthDate, MaxAge, PrefabPath, HeightMapMesh);
+            var seed = new Plant(Name, seedPosition, SizeRadius, MinDistIntern, MinDistExtern, SeedingRadius, SeedCount,
+                BirthDate, MaxAge, PrefabPath, Mesh);
             seeds.Add(seed);
         }
+
         return seeds;
     }
 
@@ -106,20 +130,20 @@ public class Plant
     {
         // If one plant is already dead, do nothing
         if (IsDead || other.IsDead) return 0;
-        
+
         // If the plants are too far apart, do nothing
         var distance = Vector2.Distance(Position, other.Position);
         if (Name == other.Name)
         {
             // Same plant type
-            if (!(distance < SizeRadiusInternal + other.SizeRadiusInternal)) return 0;
+            if (!(distance < MinDistIntern)) return 0;
         }
         else
         {
             // Different plant type
-            if (!(distance < SizeRadiusExternal + other.SizeRadiusExternal)) return 0;
+            if (!(distance < Mathf.Max(MinDistExtern + other.MinDistExtern))) return 0;
         }
-        
+
         // Else: Kill the plant with lower viability
         if (Viability > other.Viability)
         {

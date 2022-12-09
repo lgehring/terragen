@@ -26,5 +26,9 @@ public class MapDisplay : MonoBehaviour
     {
         meshFilter.sharedMesh = meshData.CreateMesh();
         meshRenderer.sharedMaterial.mainTexture = texture;
+        
+        // Update mesh in he Ecosystem
+        var ecosystem = FindObjectOfType<Ecosystem>();
+        ecosystem.SetMeshData(meshFilter.sharedMesh);
     }
 }
