@@ -7,8 +7,8 @@ using UnityEngine;
 public class Plant : IQuadTreeObject
 {
     // Constructor
-    public Plant(string name, Vector2 position, float sizeRadius, float minDistIntern, float minDistExtern,
-        float seedingRadius, int seedCount, double maxAge, Object prefab, MeshCollider myMeshCollider, double minSlope, double maxSlope,
+    public Plant(string name, Vector2 position, double sizeRadius, double minDistIntern, double minDistExtern,
+        double seedingRadius, int seedCount, double maxAge, Object prefab, MeshCollider myMeshCollider, double minSlope, double maxSlope,
         double minHeight, double maxHeight)
     {
         Name = name;
@@ -21,32 +21,30 @@ public class Plant : IQuadTreeObject
         MaxAge = maxAge;
         Age = 0;
         Prefab = prefab;
-        MaxBounds = new Rect(position.x - minDistExtern,
-            position.y - minDistExtern,
-            minDistExtern * 2,
-            minDistExtern * 2);
+        MaxBounds = new Rect((float)(position.x - minDistExtern),
+            (float)(position.y - minDistExtern),
+            (float)(minDistExtern * 2),
+            (float)(minDistExtern * 2));
         MinSlope = minSlope;
         MaxSlope = maxSlope;
         MinHeight = minHeight;
         MaxHeight = maxHeight;
         MyMeshCollider = myMeshCollider;
-        
-        // Get height and slope(%) at position
         Vector3 normal;
         (Height, normal) = RaycastAtPosition(position);
         var slopeDegree = Vector3.Angle(Vector3.up, normal);
         SlopePercent = Mathf.Tan(slopeDegree * Mathf.Deg2Rad) * 100;
     }
 
-    internal string Name { get; }
+    private string Name { get; }
     protected internal Vector2 Position { get; set; }
-    protected internal float Height { get; set; }
-    protected internal double SlopePercent { get; set; }
-    private float SizeRadius { get; }
+    internal double Height { get; set; }
+    internal double SlopePercent { get; set; }
+    private double SizeRadius { get; }
     internal Rect MaxBounds { get; }
-    private float MinDistIntern { get; } // Blocking zone for other plants of the same type
-    private float MinDistExtern { get; } // Blocking zone for other plants of different types
-    private float SeedingRadius { get; }
+    private double MinDistIntern { get; } // Blocking zone for other plants of the same type
+    private double MinDistExtern { get; } // Blocking zone for other plants of different types
+    private double SeedingRadius { get; }
     private int SeedCount { get; }
     private double Viability { get; set; }
     private double MaxAge { get; }
@@ -67,9 +65,9 @@ public class Plant : IQuadTreeObject
     }
     
     // Return a deep copy of this plant
-    public Plant Clone()
+    public Plant Clone(Vector2 position)
     {
-        return new Plant(Name, Position, SizeRadius, MinDistIntern, MinDistExtern, SeedingRadius, SeedCount, MaxAge, Prefab, MyMeshCollider, MinSlope, MaxSlope, MinHeight, MaxHeight);
+        return new Plant(Name, position, SizeRadius, MinDistIntern, MinDistExtern, SeedingRadius, SeedCount, MaxAge, Prefab, MyMeshCollider, MinSlope, MaxSlope, MinHeight, MaxHeight);
     }
 
     // Draw the plant on the map if conditions met, else kill it
@@ -83,8 +81,8 @@ public class Plant : IQuadTreeObject
         var bounds = meshFilter.mesh.bounds;
         var maxExtent = Mathf.Max(bounds.size.x, bounds.size.z);
         var scale = SizeRadius / maxExtent;
-        GameObject.transform.localScale = new Vector3(scale, scale, scale);
-        GameObject.transform.position = new Vector3(Position.x, Height, Position.y);
+        GameObject.transform.localScale = new Vector3((float)scale, (float)scale, (float)scale);
+        GameObject.transform.position = new Vector3(Position.x, (float)Height, Position.y);
     }
 
     private (float height, Vector3 normal) RaycastAtPosition(Vector2 position)
@@ -98,25 +96,23 @@ public class Plant : IQuadTreeObject
         height = hit.point.y;
         normal = hit.normal;
         
-        // Convert normal to angle in degrees to XZ plane (0° = flat, 90° = vertical) TODO: remove
-        var angleDegree = Vector3.Angle(Vector3.up, normal);
-        var anglePercent = Mathf.Tan(angleDegree * Mathf.Deg2Rad) * 100;
-
-        var color = Color.blue;
-        if (anglePercent > 200)
-        {
-            color = Color.red;
-        }
-        else if (anglePercent > 100)
-        {
-            color = Color.yellow;
-        }
-        else if (anglePercent > 0)
-        {
-            color = Color.green;
-        }
-        
-        Debug.DrawRay(hit.point, hit.normal, color, 100f);
+        // // VISUAL DEBUG RAYCAST
+        // var angleDegree = Vector3.Angle(Vector3.up, normal);
+        // var anglePercent = Mathf.Tan(angleDegree * Mathf.Deg2Rad) * 100;
+        // var color = Color.blue;
+        // if (anglePercent > 200)
+        // {
+        //     color = Color.red;
+        // }
+        // else if (anglePercent > 100)
+        // {
+        //     color = Color.yellow;
+        // }
+        // else if (anglePercent > 0)
+        // {
+        //     color = Color.green;
+        // }
+        // Debug.DrawRay(hit.point, hit.normal, color, 100f);
 
         return (height, normal);
     }
@@ -152,8 +148,8 @@ public class Plant : IQuadTreeObject
         {
             // Create a new plant with identical properties at a random position within the seeding radius
             var seedPosition = new Vector2(
-                Random.Range(Position.x - SeedingRadius, Position.x + SeedingRadius),
-                Random.Range(Position.y - SeedingRadius, Position.y + SeedingRadius)
+                Random.Range(Position.x - (float)SeedingRadius, Position.x + (float)SeedingRadius),
+                Random.Range(Position.y - (float)SeedingRadius, Position.y + (float)SeedingRadius)
             );
             var seed = new Plant(Name, seedPosition, SizeRadius, MinDistIntern, MinDistExtern, SeedingRadius, SeedCount,
                 MaxAge, Prefab, MyMeshCollider, MinSlope, MaxSlope, MinHeight, MaxHeight);
@@ -182,7 +178,7 @@ public class Plant : IQuadTreeObject
 
     // Detect if two plants collide and kill the one with lower viability
     // Returns 1 if the plant was killed, 2 if the other plant was killed and 0 if neither was killed
-    protected internal int Collides(Plant other, float viabilityModifier, float collidingViabilityModifier)
+    protected internal int Collides(Plant other)
     {
         // If one plant is already dead, do nothing
         if (IsDead || other.IsDead) return 0;
@@ -197,11 +193,11 @@ public class Plant : IQuadTreeObject
         else
         {
             // Different plant type
-            if (!(distance < Mathf.Max(MinDistExtern + other.MinDistExtern))) return 0;
+            if (!(distance < Mathf.Max((float)MinDistExtern + (float)other.MinDistExtern))) return 0;
         }
 
         // Else: Kill the plant with lower viability
-        if (Viability*viabilityModifier > other.Viability*collidingViabilityModifier)
+        if (Viability > other.Viability)
         {
             other.Die();
             return 2;

@@ -1,7 +1,6 @@
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
-using UnityEngine.Profiling;
 
 /// <summary>
 ///     A class keeping track of and modelling all plants.
@@ -117,22 +116,13 @@ public class Ecosystem : MonoBehaviour
         foreach (var plant in plantsQuadTree.GetAllElements())
         {
             var collidingPlants = plantsQuadTree.RetrieveObjectsInArea(plant.MaxBounds);
-            
-            // Implement environmental feedback (overcrowding of one plant species cause the resources to run out)
-            var plantCollidingPlantsOtherSpecies = collidingPlants.Count(p => p.Name != plant.Name);
-            var plantViabilityModifier = plantCollidingPlantsOtherSpecies / collidingPlants.Count();
 
             // Check for collisions with each colliding plant
             foreach (var collidingPlant in collidingPlants)
             {
                 if (collidingPlant == plant) continue;
-                
-                // Get colliding plant viability modifier
-                var collidingPlantCollidingPlants = plantsQuadTree.RetrieveObjectsInArea(collidingPlant.MaxBounds);
-                var collidingPlantCollidingPlantsOtherSpecies = collidingPlantCollidingPlants.Count(p => p.Name != collidingPlant.Name);
-                var collidingPlantViabilityModifier = collidingPlantCollidingPlantsOtherSpecies / collidingPlantCollidingPlants.Count();
 
-                var loser = plant.Collides(collidingPlant, plantViabilityModifier, collidingPlantViabilityModifier);
+                var loser = plant.Collides(collidingPlant);
                 switch (loser)
                 {
                     case 1:
@@ -154,12 +144,11 @@ public class Ecosystem : MonoBehaviour
         for (var i = 0; i < numPlants; i++)
         {
             var plantIndex = Random.Range(0, _plantTemplates.Count);
-            // Deep copy the plant template
-            var newPlant = _plantTemplates[plantIndex].Clone();
             // Randomize position
             var x = Random.Range(bounds.xMin, bounds.xMax);
             var y = Random.Range(bounds.yMin, bounds.yMax);
-            newPlant.Position = new Vector2(x, y);
+            // Deep copy the plant template
+            var newPlant = _plantTemplates[plantIndex].Clone(new Vector2(x, y));
             plantsQuadTree.Insert(newPlant);
             if (instantiateLive) newPlant.Instantiate();
         }
