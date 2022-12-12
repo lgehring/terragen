@@ -25,27 +25,35 @@ public class Ecosystem : MonoBehaviour
     private void Awake()
     {
         // Redefine bounds TODO: like mesh, move somewhere else
-        bounds = new Rect(-100, -100, 200, 200);
+        bounds = new Rect(-1205, -1205, 2410, 2410); // 2.41 km x 2.41 km ~ 5.81 km^2
 
         // Initialize quadtree with ecosystem bounds and maximum plants per node
         plantsQuadTree = new QuadTree<Plant>(50, bounds); // 50 was optimal for 20 iterations
 
         // Set instantiateLive to false for performance 
         instantiateLive = false;
+        
+        // Get mesh Collider
+        var meshCollider = GameObject.Find("Mesh").GetComponent<MeshCollider>();
 
         // Populate plant templates
         _plantTemplates = new List<Plant>
         {
-            new(
-                "Grass",
-                Vector2.zero, //TODO: calc height here instead of in plant
-                1.0f,
-                0.5f,
-                1.5f,
-                5.0f,
-                5,
-                3.0,
-                Resources.Load("grass")),
+            // new(
+            //     "Grass", 
+            //     Vector2.zero, //TODO: calc height here instead of in plant
+            //     1.0f,
+            //     0.5f,
+            //     1.5f,
+            //     5.0f,
+            //     5,
+            //     3.0,
+            //     Resources.Load("grass"),
+            //     meshCollider,
+            //     0.0,
+            //     100.0,
+            //     0.0,
+            //     3000.0),
 
             new(
                 "Tree",
@@ -56,7 +64,12 @@ public class Ecosystem : MonoBehaviour
                 20.0f,
                 1,
                 5.0,
-                Resources.Load("tree"))
+                Resources.Load("tree"),
+                meshCollider,
+                0.0,
+                200.0,
+                0.0,
+                2000.0)
         };
     }
 
@@ -85,10 +98,10 @@ public class Ecosystem : MonoBehaviour
 
         // Remove plants that collide with other plants
         RemoveCollisions();
-        // Grow all plants and remove old ones
+        // Grow all plants and remove old ones and seeds that have unsuitable conditions
         foreach (var plant in from plant in plantsQuadTree.GetAllElements()
-                 let old = plant.Grow()
-                 where old
+                 let dies = plant.Grow()
+                 where dies
                  select plant)
             plantsQuadTree.Remove(plant);
 
@@ -126,12 +139,13 @@ public class Ecosystem : MonoBehaviour
     }
 
     // Initially seed the ecosystem randomly with a few plants from the templates
-    public void InitSeeds(int numPlants = 10)
+    public void InitSeeds(int numPlants = 1000)
     {
         for (var i = 0; i < numPlants; i++)
         {
             var plantIndex = Random.Range(0, _plantTemplates.Count);
-            var newPlant = _plantTemplates[plantIndex];
+            // Deep copy the plant template
+            var newPlant = _plantTemplates[plantIndex].Clone();
             // Randomize position
             var x = Random.Range(bounds.xMin, bounds.xMax);
             var y = Random.Range(bounds.yMin, bounds.yMax);
