@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
+using UnityEngine.Profiling;
 
 /// <summary>
 ///     A class keeping track of and modelling all plants.
@@ -39,21 +40,21 @@ public class Ecosystem : MonoBehaviour
         // Populate plant templates
         _plantTemplates = new List<Plant>
         {
-            // new(
-            //     "Grass", 
-            //     Vector2.zero, //TODO: calc height here instead of in plant
-            //     1.0f,
-            //     0.5f,
-            //     1.5f,
-            //     5.0f,
-            //     5,
-            //     3.0,
-            //     Resources.Load("grass"),
-            //     meshCollider,
-            //     0.0,
-            //     100.0,
-            //     0.0,
-            //     3000.0),
+            new(
+                "Grass", 
+                Vector2.zero, //TODO: calc height here instead of in plant
+                1.0f,
+                0.5f,
+                1.5f,
+                5.0f,
+                5,
+                3.0,
+                Resources.Load("grass"),
+                meshCollider,
+                0.0,
+                100.0,
+                0.0,
+                3000.0),
 
             new(
                 "Tree",
@@ -116,13 +117,22 @@ public class Ecosystem : MonoBehaviour
         foreach (var plant in plantsQuadTree.GetAllElements())
         {
             var collidingPlants = plantsQuadTree.RetrieveObjectsInArea(plant.MaxBounds);
+            
+            // Implement environmental feedback (overcrowding of one plant species cause the resources to run out)
+            var plantCollidingPlantsOtherSpecies = collidingPlants.Count(p => p.Name != plant.Name);
+            var plantViabilityModifier = plantCollidingPlantsOtherSpecies / collidingPlants.Count();
 
             // Check for collisions with each colliding plant
             foreach (var collidingPlant in collidingPlants)
             {
                 if (collidingPlant == plant) continue;
+                
+                // Get colliding plant viability modifier
+                var collidingPlantCollidingPlants = plantsQuadTree.RetrieveObjectsInArea(collidingPlant.MaxBounds);
+                var collidingPlantCollidingPlantsOtherSpecies = collidingPlantCollidingPlants.Count(p => p.Name != collidingPlant.Name);
+                var collidingPlantViabilityModifier = collidingPlantCollidingPlantsOtherSpecies / collidingPlantCollidingPlants.Count();
 
-                var loser = plant.Collides(collidingPlant);
+                var loser = plant.Collides(collidingPlant, plantViabilityModifier, collidingPlantViabilityModifier);
                 switch (loser)
                 {
                     case 1:

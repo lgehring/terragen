@@ -38,7 +38,7 @@ public class Plant : IQuadTreeObject
         SlopePercent = Mathf.Tan(slopeDegree * Mathf.Deg2Rad) * 100;
     }
 
-    private string Name { get; }
+    internal string Name { get; }
     protected internal Vector2 Position { get; set; }
     protected internal float Height { get; set; }
     protected internal double SlopePercent { get; set; }
@@ -182,7 +182,7 @@ public class Plant : IQuadTreeObject
 
     // Detect if two plants collide and kill the one with lower viability
     // Returns 1 if the plant was killed, 2 if the other plant was killed and 0 if neither was killed
-    protected internal int Collides(Plant other)
+    protected internal int Collides(Plant other, float viabilityModifier, float collidingViabilityModifier)
     {
         // If one plant is already dead, do nothing
         if (IsDead || other.IsDead) return 0;
@@ -201,7 +201,7 @@ public class Plant : IQuadTreeObject
         }
 
         // Else: Kill the plant with lower viability
-        if (Viability > other.Viability)
+        if (Viability*viabilityModifier > other.Viability*collidingViabilityModifier)
         {
             other.Die();
             return 2;
