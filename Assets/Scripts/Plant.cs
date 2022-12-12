@@ -1,34 +1,14 @@
 using System.Collections.Generic;
-using Unity.VisualScripting.FullSerializer;
 using UnityEngine;
 
 /// <summary>
 ///     A class defining a single plant object and its ecological properties.
 /// </summary>
-public class Plant
+public class Plant : IQuadTreeObject
 {
-    private Mesh _heightMapMesh;
-    private string Name { get; set; }
-    protected internal Vector2 Position { get; set; }
-    private float SizeRadius { get; set; }
-    private float MinDistIntern { get; set; } // Blocking zone for other plants of the same type
-    private float MinDistExtern { get; set; } // Blocking zone for other plants of different types
-    private float SeedingRadius { get; set; }
-    private int SeedCount { get; set; }
-    private double Viability { get; set; }
-    private double BirthDate { get; set; }
-    private double MaxAge { get; set; }
-    private double Age { get; set; }
-    private bool IsDead { get; set; }
-    private GameObject GameObject { get; set; }
-    private string PrefabPath { get; set; }
-    private Mesh Mesh { get; set; }
-
     // Constructor
     public Plant(string name, Vector2 position, float sizeRadius, float minDistIntern, float minDistExtern,
-        float seedingRadius,
-        int seedCount, double birthDate,
-        double maxAge, string prefabPath, Mesh mesh, bool isTemplate = false)
+        float seedingRadius, int seedCount, double maxAge, Object prefab)
     {
         Name = name;
         Position = position;
@@ -37,35 +17,56 @@ public class Plant
         MinDistExtern = minDistExtern;
         SeedingRadius = seedingRadius;
         SeedCount = seedCount;
-        BirthDate = birthDate;
         MaxAge = maxAge;
         Age = 0;
-        PrefabPath = prefabPath;
-        Mesh = mesh;
-        if (!isTemplate)
-        {
-            GameObject = (GameObject)Object.Instantiate(Resources.Load(prefabPath));
-            // Scale game object to fit within the internal size radius of the plant
-            var meshFilter = GameObject.GetComponent<MeshFilter>();
-            var bounds = meshFilter.mesh.bounds;
-            var maxExtent = Mathf.Max(bounds.size.x, bounds.size.z);
-            var scale = SizeRadius / maxExtent;
-            GameObject.transform.localScale = new Vector3(scale, scale, scale);
-            // Set position
-            var height = GetHeightAtPosition(position);
-            GameObject.transform.position = new Vector3(position.x, height, position.y);
-        }
+        Prefab = prefab;
+        MaxBounds = new Rect(position.x - minDistExtern,
+            position.y - minDistExtern,
+            minDistExtern * 2,
+            minDistExtern * 2);
     }
 
-    private float GetHeightAtPosition(Vector2 position)
+    private string Name { get; }
+    protected internal Vector2 Position { get; set; }
+    private float SizeRadius { get; }
+    internal Rect MaxBounds { get; set; }
+    private float MinDistIntern { get; } // Blocking zone for other plants of the same type
+    private float MinDistExtern { get; } // Blocking zone for other plants of different types
+    private float SeedingRadius { get; }
+    private int SeedCount { get; }
+    private double Viability { get; set; }
+    private double MaxAge { get; }
+    private double Age { get; set; }
+    private bool IsDead { get; set; }
+    private GameObject GameObject { get; set; }
+    private Object Prefab { get; }
+
+    // Implement IQuadTreeObject interface
+    public Vector2 GetPosition()
+    {
+        return Position;
+    }
+
+    public void Instantiate()
+    {
+        GameObject = (GameObject)Object.Instantiate(Prefab);
+        GameObject.isStatic = true;
+        // Scale game object to fit within the internal size radius of the plant TODO: optimize
+        var meshFilter = GameObject.GetComponent<MeshFilter>();
+        var bounds = meshFilter.mesh.bounds;
+        var maxExtent = Mathf.Max(bounds.size.x, bounds.size.z);
+        var scale = SizeRadius / maxExtent;
+        GameObject.transform.localScale = new Vector3(scale, scale, scale);
+        // Set position
+        var height = GetHeightAtPosition(Position);
+        GameObject.transform.position = new Vector3(Position.x, height, Position.y);
+    }
+
+    private static float GetHeightAtPosition(Vector2 position)
     {
         var height = 0f;
         var ray = new Ray(new Vector3(position.x, 1000, position.y), Vector3.down);
-        RaycastHit hit;
-        if (Physics.Raycast(ray, out hit))
-        {
-            height = hit.point.y;
-        }
+        if (Physics.Raycast(ray, out var hit)) height = hit.point.y;
 
         return height;
     }
@@ -74,13 +75,13 @@ public class Plant
     public bool Grow(double deltaT = 0.5)
     {
         Age += deltaT;
-        UpdateViability();
         if (Age > MaxAge)
         {
             Die();
             return true;
         }
 
+        UpdateViability();
         return false;
     }
 
@@ -96,7 +97,7 @@ public class Plant
                 Random.Range(Position.y - SeedingRadius, Position.y + SeedingRadius)
             );
             var seed = new Plant(Name, seedPosition, SizeRadius, MinDistIntern, MinDistExtern, SeedingRadius, SeedCount,
-                BirthDate, MaxAge, PrefabPath, Mesh);
+                MaxAge, Prefab);
             seeds.Add(seed);
         }
 
@@ -108,13 +109,9 @@ public class Plant
     {
         var normalizedAge = Age / MaxAge;
         if (normalizedAge < 0.5)
-        {
             Viability = normalizedAge;
-        }
         else
-        {
             Viability = 1 - normalizedAge;
-        }
     }
 
     // Kills the plant
@@ -150,10 +147,8 @@ public class Plant
             other.Die();
             return 2;
         }
-        else
-        {
-            Die();
-            return 1;
-        }
+
+        Die();
+        return 1;
     }
 }
