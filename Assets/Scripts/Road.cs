@@ -1,15 +1,29 @@
 using System.Collections;
 using System.Collections.Generic;
+using System.Diagnostics.Tracing;
 using UnityEngine;
 
+public struct RoadNode {
+    public Vector3 pos;
+    public float heuristic;
+    public int idx;
+    public int predIdx;
+    public Vector3 normal;
+    public RoadNode(int _idx)
+    {
+        pos = new Vector3(0.0f, 0.0f, 0.0f);
+        idx = _idx;
+        heuristic = float.PositiveInfinity;
+        predIdx = _idx;
+        normal = new Vector3(0.0f, 0.0f, 1.0f);
+    }
+}
 public class Road : MonoBehaviour
 {
     public int bounds;
-    private float[,] heights;
-    private Vector3[,] normals;
     public Vector2Int startingPosition;
     public Vector2Int endingPosition;
-    private Queue<Vector2> nodeOrder;
+    private RoadNode[] nodes;
     private MeshCollider MyMeshCollider { get; set; }
 
     public Road(Vector2 start, Vector2 end, MeshCollider mesh, int _bounds)
@@ -17,14 +31,17 @@ public class Road : MonoBehaviour
         bounds = _bounds;
         startingPosition = new Vector2Int((int)start.x, (int)start.y);
         endingPosition = new Vector2Int((int)end.x, (int)end.y);
-        heights = new float[bounds,bounds];
+        nodes = new RoadNode[bounds*bounds];
 
         # pragma omp parallel for
         for (int y = 0; y < bounds; ++y)
         {
             for(int x = 0; x < bounds; ++x)
             {
-                (heights[x, y], normals[x, y]) = RaycastAtPosition(new Vector2(x, y));
+                int index = y * bounds + x;
+                nodes[index] = new RoadNode(index);
+                nodes[index].pos = new Vector3(x,y,0.0f);
+                (nodes[index].pos.z, nodes[index].normal) = RaycastAtPosition(new Vector2(x, y));
             }
         }
     }
@@ -63,16 +80,21 @@ public class Road : MonoBehaviour
 
     public void generateRoad(Vector2 start, Vector2 end)
     {
+        // We are going to use an A*-Algorithm to calculate the shortest path
         startingPosition = new Vector2Int((int)start.x, (int)start.y);
         endingPosition = new Vector2Int((int)end.x, (int)end.y);
 
-        // for the heuristic we are just going to calculate the square distance from the end point to every point
+        // for the heuristic we are just going to calculate the square 3D distance from the end point to every point
         for (int y = 0; y < bounds; ++y)
         {
             for (int x = 0; x < bounds; ++x)
             {
-
+                int index = y * bounds + x; 
+                Vector3 dists = nodes[index].pos - nodes[endingPosition.y*bounds+endingPosition.x].pos;
+                nodes[index].heuristic = dists.x*dists.x+dists.y*dists.y+dists.z*dists.z;
             }
         }
+        
+
     }
 }
