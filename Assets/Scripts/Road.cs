@@ -12,6 +12,12 @@ using UnityEditor.Experimental.GraphView;
 using UnityEngine;
 using UnityEngine.Analytics;
 
+public enum RoadNodeType
+{
+    Road,
+    Tunnel,
+    Bridge
+}
 public struct RoadNode {
     public Vector3 pos;
     public float heuristic;
@@ -20,6 +26,7 @@ public struct RoadNode {
     public Vector3 normal;
     public float dist;
     public bool isValid;
+    public RoadNodeType roadType;
     public RoadNode(int _idx)
     {
         pos = new Vector3(0.0f, 0.0f, 0.0f);
@@ -29,6 +36,7 @@ public struct RoadNode {
         normal = new Vector3(0.0f, 0.0f, 1.0f);
         dist = float.PositiveInfinity;
         isValid = true;
+        roadType = RoadNodeType.Road;
     }
 }
 public struct GridBounds
@@ -299,24 +307,6 @@ public class Road : MonoBehaviour
         height = hit.point.y;
         normal = hit.normal;
 
-        // // VISUAL DEBUG RAYCAST
-        // var angleDegree = Vector3.Angle(Vector3.up, normal);
-        // var anglePercent = Mathf.Tan(angleDegree * Mathf.Deg2Rad) * 100;
-        // var color = Color.blue;
-        // if (anglePercent > 200)
-        // {
-        //     color = Color.red;
-        // }
-        // else if (anglePercent > 100)
-        // {
-        //     color = Color.yellow;
-        // }
-        // else if (anglePercent > 0)
-        // {
-        //     color = Color.green;
-        // }
-        // Debug.DrawRay(hit.point, hit.normal, color, 100f);
-
         return (height, normal);
     }
 
@@ -326,14 +316,14 @@ public class Road : MonoBehaviour
         // We are going to use an A*-Algorithm to calculate the shortest path
         startingPosition = new Vector2Int((int)start.x + halveBounds, (int)start.y + halveBounds);
         endingPosition = new Vector2Int((int)end.x + halveBounds, (int)end.y + halveBounds);
-
+        int index = 0;
         
         // for the heuristic we are just going to calculate the square 3D distance from the end point to every point
         for (int z_val = 0; z_val < bounds; ++z_val)
         {
             for (int x_val = 0; x_val < bounds; ++x_val)
             {
-                int index = z_val * bounds + x_val;
+                index = z_val * bounds + x_val;
                 if (!nodes[index].isValid)
                 {
                     continue;
@@ -353,15 +343,13 @@ public class Road : MonoBehaviour
         int oldIndex = -1;
         visited[endingPosition.y * bounds + endingPosition.x] = false;
         int count = 0;
+        int x = 0;
+        int z = 0;
+        Vector3 relativeDist = new Vector3();
+        float newDist = float.PositiveInfinity;
         while (notVisited.lastIndex > 0 && !visited[endingPosition.y * bounds + endingPosition.x])
         {
             oldIndex = notVisited.pop();
-            float test = notVisited.allElementsBigger(nodes[oldIndex].dist);
-            if (test > 0)
-            {
-                print(test);
-                throw new Exception("Heap not working");
-            }
             if (!nodes[oldIndex].isValid)
             {
                 continue;
@@ -370,16 +358,16 @@ public class Road : MonoBehaviour
             {
                 for (int j = -outerRadius; j <= outerRadius; ++j)
                 {
-                    int x = oldIndex % bounds + i;
-                    int z = oldIndex / bounds + j;
+                    x = oldIndex % bounds + i;
+                    z = oldIndex / bounds + j;
                     if (x < 0 || x >= bounds || z < 0 || z >= bounds) continue;
-                    int index = z * bounds + x;
+                    index = z * bounds + x;
                     if (visited[index]) continue;
                     if (oldIndex == index) continue;
                     if (i * i + j * j < innerRadius * innerRadius) continue;
                     if (i * i + j * j > outerRadius * outerRadius) continue;
-                    Vector3 relativeDist = nodes[index].pos - nodes[oldIndex].pos;
-                    float newDist = nodes[oldIndex].dist + relativeDist.x * relativeDist.x + relativeDist.y * relativeDist.y + relativeDist.z * relativeDist.z;
+                    relativeDist = nodes[index].pos - nodes[oldIndex].pos;
+                    newDist = nodes[oldIndex].dist + evalSlope(relativeDist)*relativeDist.sqrMagnitude;
                     if (newDist < nodes[index].dist)
                     {
                         nodes[index].dist = newDist;
@@ -391,6 +379,28 @@ public class Road : MonoBehaviour
             visited[oldIndex] = true;
             count++;
         }
-        print("This is the distance of the finale node: " + nodes[endingPosition.y*bounds+endingPosition.x].dist);
+    }
+
+    private float evalSlope(Vector3 dirVec)
+    {
+        dirVec.y = Mathf.Abs(dirVec.y);
+        dirVec.Normalize();
+
+        // If the slope is above very natural 60 degrees we do not want a path going up there (or down there)
+        if(dirVec.y > 0.5f)
+        {
+            return float.PositiveInfinity;
+        }
+        else
+        {
+            // Using some kind of sigmoid function to determine the impact of the slope
+            
+            return 1+ dirVec.y*10;
+        }
+    }
+
+    private float evalTunnel(Vector3 dirVec)
+    {
+        return 1f;
     }
 }
