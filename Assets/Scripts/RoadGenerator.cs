@@ -7,7 +7,7 @@ using UnityEditor;
 using UnityEngine;
 using static UnityEngine.GraphicsBuffer;
 using System.Linq;
-using SplineMesh;
+using UnityEngine.Splines;
 
 public class RoadGenerator : MonoBehaviour
 {
@@ -16,6 +16,15 @@ public class RoadGenerator : MonoBehaviour
     public Transform map;
     public int innerRadiusForAStar;
     public int outerRadiusForAStar;
+    public int gridSizeInMeters;
+    private void OnValidate()
+    {
+        if (gridSizeInMeters < 1)
+            gridSizeInMeters = 1;
+        if(gridSizeInMeters > 2410) {
+            gridSizeInMeters = 2410;
+        }
+    }
     public void drawRoadMesh()
     {
         startingPoint = this.GetComponentsInChildren<Transform>()[1].gameObject;
@@ -26,26 +35,24 @@ public class RoadGenerator : MonoBehaviour
             DestroyImmediate(this.GetComponentsInChildren<Transform>()[i].gameObject);
         }
 
-        //FIXME: this assumes that the plane is at 0,0
         int bounds = (int)Mathf.Abs((map.localScale).x*10);
-        
-        // FIXME: This might assumes that the roadGenerator is at 0,0, could also give the correct coordinate
-        Vector2 start = new Vector2(startingPoint.transform.position.x, startingPoint.transform.position.z);
-        Vector2 end = new Vector2(endPoint.transform.position.x, endPoint.transform.position.z);
+        Vector2Int offset = new Vector2Int((int)map.position.x, (int)map.position.z);
+        Vector2Int start = new Vector2Int((int)startingPoint.transform.position.x, (int)startingPoint.transform.position.z);
+        Vector2Int end = new Vector2Int((int)endPoint.transform.position.x, (int)endPoint.transform.position.z);
+        start -= offset;
+        end -= offset;
 
-        if(Mathf.Min(end.x,end.y,start.x,start.y) < -bounds/2 || Mathf.Max(end.x,end.y,start.x,start.y) > bounds / 2)
+        if (Mathf.Min(end.x,end.y,start.x,start.y) < -bounds/2 || Mathf.Max(end.x,end.y,start.x,start.y) > bounds / 2)
         {
             throw new ArgumentException("The starting or endpoint is out of bounds");
         }
 
-        Road road = new Road(start, end, bounds, innerRadiusForAStar, outerRadiusForAStar);
+        Road road = new Road(start, end, bounds, innerRadiusForAStar, outerRadiusForAStar, gridSizeInMeters, offset);
         road.generateRoad(start, end);
 
-        
-        
-
-        int startIdx = (int)(start.y + bounds / 2) * bounds + (int)(start.x + bounds / 2);
-        int endingIdx = (int)(end.y + bounds / 2) * bounds + (int)(end.x + bounds / 2);
+        //int startIdx = ((start.x + bounds/2 - (int)offset.x) * bounds + (start.y + bounds/2 - (int)offset.y))/gridSizeInMeters;
+        int endingIdx = (end.x + bounds/2 - (int)offset.x)/gridSizeInMeters * bounds/gridSizeInMeters + (end.y + bounds/2 - (int)offset.y)/gridSizeInMeters;
+        print("This is the ending index in the generator " + endingIdx);
 
         List<Vector3> path = new List<Vector3>();
         List<Vector3> normals = new List<Vector3>();
@@ -75,7 +82,7 @@ public class RoadGenerator : MonoBehaviour
 
     private void generateSpline(List<Vector3> points, List<Vector3> normals)
     {
-        /*GameObject spline = new GameObject("Road");
+        GameObject spline = new GameObject("Road");
         spline.transform.parent = this.transform;
         spline.GetOrAddComponent<SplineContainer>();
         for (int i = 0; i < points.Count; i++)
@@ -83,25 +90,6 @@ public class RoadGenerator : MonoBehaviour
             spline.GetComponent<SplineContainer>().Spline.Add(new BezierKnot(points[i]));
         }
 
-        spline.GetComponent<SplineContainer>().Spline.SetTangentMode(TangentMode.AutoSmooth);*/
-        /*GameObject splineGameObj = new GameObject("Road");
-        splineGameObj.transform.parent = this.transform;
-        splineGameObj.AddComponent<Spline>();
-        splineGameObj.GetComponent<Spline>().nodes.Clear();
-        for (int i = 0; i < points.Count-1; i++)
-        {
-            splineGameObj.GetComponent<Spline>().AddNode(new SplineMesh.SplineNode(points[i], (points[points.Count-1]- points[i]).normalized));
-            splineGameObj.GetComponent<Spline>().nodes[i].Up = normals[i];
-        }*/
-        for (int i = 0; i < points.Count - 1; i++)
-        {
-            GameObject road = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            road.transform.parent = this.transform;
-            road.transform.position = points[i];
-            road.transform.up = normals[i];
-            road.transform.localScale = new Vector3(0.1f, 0.1f, Vector3.Distance(points[i], points[i + 1]));
-            var Renderer = road.GetComponent<Renderer>();
-            Renderer.sharedMaterial.SetColor("_Color", Color.red);
-        }
+        spline.GetComponent<SplineContainer>().Spline.SetTangentMode(TangentMode.AutoSmooth);
     }
 }

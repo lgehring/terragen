@@ -251,7 +251,7 @@ public struct NodeHeap
 }
 public class Road : MonoBehaviour
 {
-    private int bounds;
+    private int gridSize;
     private Vector2Int startingPosition;
     private Vector2Int endingPosition;
     public RoadNode[] nodes;
@@ -259,39 +259,46 @@ public class Road : MonoBehaviour
     private int outerRadius;
     private MeshCollider MyMeshCollider;
     private GridBounds gridBounds;
+    private Vector2 offset;
+    private int stepLength;
 
-    public Road(Vector2 start, Vector2 end, int _bounds, int _innerRadius, int _outerRadius)
+    public Road(Vector2Int start, Vector2Int end, int _bounds, int _innerRadius, int _outerRadius, int _stepLength, Vector2 _offset)
     {
-        bounds = _bounds;
-        int halveBounds = bounds / 2;
-        //FIXME: This assumes that bounds goes from -n to n
-        startingPosition = new Vector2Int((int)start.x + halveBounds, (int)start.y + halveBounds);
-        endingPosition = new Vector2Int((int)end.x + halveBounds, (int)end.y+ halveBounds);
-        nodes = new RoadNode[bounds*bounds];
+        gridSize = _bounds/_stepLength;
+        stepLength = _stepLength;
+        offset.x = _bounds / 2 - _offset.x;
+        offset.y = _bounds / 2 - _offset.y;
+        nodes = new RoadNode[gridSize*gridSize];
+        startingPosition = new Vector2Int((start.x + (int)offset.x)/stepLength, (start.y + (int)offset.y) / stepLength);
+        endingPosition = new Vector2Int((end.x + (int)offset.x) / stepLength, (end.y + (int)offset.y) / stepLength);
         innerRadius = _innerRadius;
         outerRadius = _outerRadius;
         MyMeshCollider = GameObject.Find("Mesh").GetComponent<MeshCollider>();
-        int lowerX = Math.Max(0,Math.Min(startingPosition.x, endingPosition.x)-100);
-        int upperX = Math.Min(bounds-1, Math.Max(startingPosition.x, endingPosition.x) + 100);
-        int lowerZ = Math.Min(bounds - 1, Math.Max(startingPosition.y, endingPosition.y) + 100);
-        int upperZ = Math.Min(bounds - 1, Math.Max(startingPosition.y, endingPosition.y) + 100);
+        int gridExpansion = Math.Max(1, 100 / stepLength);
+        int lowerX = Math.Max(0,Math.Min(startingPosition.x, endingPosition.x)- gridExpansion);
+        int upperX = Math.Min(gridSize-1, Math.Max(startingPosition.x, endingPosition.x) + gridExpansion);
+        int lowerZ = Math.Max(0, Math.Max(startingPosition.y, endingPosition.y) - gridExpansion);
+        int upperZ = Math.Min(gridSize - 1, Math.Max(startingPosition.y, endingPosition.y) + gridExpansion);
         gridBounds = new GridBounds(lowerX, upperX, lowerZ, upperZ);
 
-        for (int z = 0; z < bounds; ++z)
+        for (int z = 0; z < gridSize; ++z)
         {
-            for (int x = 0; x < bounds; ++x)
+            for (int x = 0; x < gridSize; ++x)
             {
-                int index = z * bounds + x;
+                int index = z * gridSize + x;
                 if (z < gridBounds.lowerZ || z > gridBounds.upperZ || x < gridBounds.lowerX || x > gridBounds.upperX)
                 {
                     nodes[index].isValid = false;
                 }
-                nodes[index] = new RoadNode(index);
-                // FIXME: This assumes that the plane is at 0,0
-                nodes[index].pos = new Vector3(x-halveBounds,0.0f, z - halveBounds);
-                (nodes[index].pos.y, nodes[index].normal) = RaycastAtPosition(new Vector2(x-halveBounds, z-halveBounds));
-                nodes[index].idx = index;
-                nodes[index].predIdx = index;
+                else
+                {
+                    nodes[index].isValid = true;
+                    nodes[index] = new RoadNode(index);
+                    nodes[index].pos = new Vector3((x*stepLength) - offset.x, 0.0f, (z*stepLength) - offset.y);
+                    (nodes[index].pos.y, nodes[index].normal) = RaycastAtPosition(new Vector2((x * stepLength) - offset.x, (z * stepLength) - offset.y));
+                    nodes[index].idx = index;
+                    nodes[index].predIdx = index;
+                }
             }
         }
     }
@@ -306,48 +313,48 @@ public class Road : MonoBehaviour
         if (!MyMeshCollider.Raycast(ray, out var hit, maxHeight)) return (height, normal);
         height = hit.point.y;
         normal = hit.normal;
-
+        
         return (height, normal);
     }
-
-    public void generateRoad(Vector2 start, Vector2 end)
+    
+    public void generateRoad(Vector2Int start, Vector2Int end)
     {
-        int halveBounds = bounds / 2;
         // We are going to use an A*-Algorithm to calculate the shortest path
-        startingPosition = new Vector2Int((int)start.x + halveBounds, (int)start.y + halveBounds);
-        endingPosition = new Vector2Int((int)end.x + halveBounds, (int)end.y + halveBounds);
+        startingPosition = new Vector2Int((start.x + (int)offset.x) / stepLength, (start.y + (int)offset.y) / stepLength);
+        endingPosition = new Vector2Int((end.x + (int)offset.x) / stepLength, (end.y + (int)offset.y) / stepLength);
+        print("This is the ending index inside of the road class " + endingPosition.y*gridSize+endingPosition.x);
         int index = 0;
         
         // for the heuristic we are just going to calculate the square 3D distance from the end point to every point
-        for (int z_val = 0; z_val < bounds; ++z_val)
+        for (int z_val = 0; z_val < gridSize; ++z_val)
         {
-            for (int x_val = 0; x_val < bounds; ++x_val)
+            for (int x_val = 0; x_val < gridSize; ++x_val)
             {
-                index = z_val * bounds + x_val;
+                index = z_val * gridSize + x_val;
                 if (!nodes[index].isValid)
                 {
                     continue;
                 }
-                Vector3 dists = nodes[index].pos - nodes[endingPosition.y*bounds+endingPosition.x].pos;
+                Vector3 dists = nodes[index].pos - nodes[endingPosition.y*gridSize+endingPosition.x].pos;
                 nodes[index].heuristic = dists.x * dists.x + dists.y * dists.y+dists.z*dists.z;
-                nodes[startingPosition.y * bounds + startingPosition.x].dist = 0.0f;
+                nodes[startingPosition.y * gridSize + startingPosition.x].dist = 0.0f;
             }
         }
 
         // FIXME: This can be way smaller or even dynamic
-        NodeHeap notVisited = new NodeHeap(bounds*bounds);
-        bool[] visited = new bool[bounds * bounds];
+        NodeHeap notVisited = new NodeHeap(gridSize*gridSize);
+        bool[] visited = new bool[gridSize * gridSize];
 
         // we are going to start at the starting point
-        notVisited.push(startingPosition.y*bounds+startingPosition.x, 0f);
+        notVisited.push(startingPosition.y*gridSize+startingPosition.x, 0f);
         int oldIndex = -1;
-        visited[endingPosition.y * bounds + endingPosition.x] = false;
+        visited[endingPosition.y * gridSize + endingPosition.x] = false;
         int count = 0;
         int x = 0;
         int z = 0;
         Vector3 relativeDist = new Vector3();
         float newDist = float.PositiveInfinity;
-        while (notVisited.lastIndex > 0 && !visited[endingPosition.y * bounds + endingPosition.x])
+        while (notVisited.lastIndex > 0 && !visited[endingPosition.y * gridSize + endingPosition.x])
         {
             oldIndex = notVisited.pop();
             if (!nodes[oldIndex].isValid)
@@ -358,10 +365,10 @@ public class Road : MonoBehaviour
             {
                 for (int j = -outerRadius; j <= outerRadius; ++j)
                 {
-                    x = oldIndex % bounds + i;
-                    z = oldIndex / bounds + j;
-                    if (x < 0 || x >= bounds || z < 0 || z >= bounds) continue;
-                    index = z * bounds + x;
+                    x = oldIndex % gridSize + i;
+                    z = oldIndex / gridSize + j;
+                    if (x < 0 || x >= gridSize || z < 0 || z >= gridSize) continue;
+                    index = z * gridSize + x;
                     if (visited[index]) continue;
                     if (oldIndex == index) continue;
                     if (i * i + j * j < innerRadius * innerRadius) continue;
@@ -392,9 +399,7 @@ public class Road : MonoBehaviour
             return float.PositiveInfinity;
         }
         else
-        {
-            // Using some kind of sigmoid function to determine the impact of the slope
-            
+        {   
             return 1+ dirVec.y*10;
         }
     }
