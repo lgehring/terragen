@@ -27,16 +27,18 @@ public struct RoadNode {
     public float dist;
     public bool isValid;
     public RoadNodeType roadType;
+    public float mapHeight;
     public RoadNode(int _idx)
     {
         pos = new Vector3(0.0f, 0.0f, 0.0f);
         idx = _idx;
         heuristic = float.PositiveInfinity;
-        predIdx = _idx;
+        predIdx = -1;
         normal = new Vector3(0.0f, 0.0f, 1.0f);
         dist = float.PositiveInfinity;
         isValid = true;
         roadType = RoadNodeType.Road;
+        mapHeight = 0.0f;
     }
 }
 public struct GridBounds
@@ -269,17 +271,28 @@ public class Road : MonoBehaviour
         offset.x = _bounds / 2 - _offset.x;
         offset.y = _bounds / 2 - _offset.y;
         nodes = new RoadNode[gridSize*gridSize];
-        startingPosition = new Vector2Int((start.x + (int)offset.x)/stepLength, (start.y + (int)offset.y) / stepLength);
-        endingPosition = new Vector2Int((end.x + (int)offset.x) / stepLength, (end.y + (int)offset.y) / stepLength);
+        startingPosition = start;
+        endingPosition = end;
         innerRadius = _innerRadius;
         outerRadius = _outerRadius;
         MyMeshCollider = GameObject.Find("Mesh").GetComponent<MeshCollider>();
         int gridExpansion = Math.Max(1, 100 / stepLength);
         int lowerX = Math.Max(0,Math.Min(startingPosition.x, endingPosition.x)- gridExpansion);
         int upperX = Math.Min(gridSize-1, Math.Max(startingPosition.x, endingPosition.x) + gridExpansion);
-        int lowerZ = Math.Max(0, Math.Max(startingPosition.y, endingPosition.y) - gridExpansion);
+        int lowerZ = Math.Max(0, Math.Min(startingPosition.y, endingPosition.y) - gridExpansion);
         int upperZ = Math.Min(gridSize - 1, Math.Max(startingPosition.y, endingPosition.y) + gridExpansion);
         gridBounds = new GridBounds(lowerX, upperX, lowerZ, upperZ);
+
+        if (startingPosition.x < lowerX || startingPosition.x > upperX || startingPosition.y < lowerZ || startingPosition.y > upperZ)
+        {
+            Debug.Log("The starting position with " + startingPosition.x + " and " + startingPosition.y + " is not in the grid");
+            Debug.Log("The grid has the dimensions " + lowerX + " to " + upperX + " and " + lowerZ + " to " + upperZ);
+            throw new Exception("Starting position is not in bounds");
+        }
+        if (endingPosition.x < lowerX || endingPosition.x > upperX || endingPosition.y < lowerZ || endingPosition.y > upperZ)
+        {
+            throw new Exception("Ending position is not in bounds");
+        }
 
         for (int z = 0; z < gridSize; ++z)
         {
@@ -295,9 +308,9 @@ public class Road : MonoBehaviour
                     nodes[index].isValid = true;
                     nodes[index] = new RoadNode(index);
                     nodes[index].pos = new Vector3((x*stepLength) - offset.x, 0.0f, (z*stepLength) - offset.y);
-                    (nodes[index].pos.y, nodes[index].normal) = RaycastAtPosition(new Vector2((x * stepLength) - offset.x, (z * stepLength) - offset.y));
+                    (nodes[index].mapHeight, nodes[index].normal) = RaycastAtPosition(new Vector2((x * stepLength) - offset.x, (z * stepLength) - offset.y));
                     nodes[index].idx = index;
-                    nodes[index].predIdx = index;
+                    nodes[index].predIdx = -1;
                 }
             }
         }
@@ -320,9 +333,8 @@ public class Road : MonoBehaviour
     public void generateRoad(Vector2Int start, Vector2Int end)
     {
         // We are going to use an A*-Algorithm to calculate the shortest path
-        startingPosition = new Vector2Int((start.x + (int)offset.x) / stepLength, (start.y + (int)offset.y) / stepLength);
-        endingPosition = new Vector2Int((end.x + (int)offset.x) / stepLength, (end.y + (int)offset.y) / stepLength);
-        print("This is the ending index inside of the road class " + endingPosition.y*gridSize+endingPosition.x);
+        startingPosition = start;
+        endingPosition = end;
         int index = 0;
         
         // for the heuristic we are just going to calculate the square 3D distance from the end point to every point
@@ -336,8 +348,7 @@ public class Road : MonoBehaviour
                     continue;
                 }
                 Vector3 dists = nodes[index].pos - nodes[endingPosition.y*gridSize+endingPosition.x].pos;
-                nodes[index].heuristic = dists.x * dists.x + dists.y * dists.y+dists.z*dists.z;
-                nodes[startingPosition.y * gridSize + startingPosition.x].dist = 0.0f;
+                nodes[index].heuristic = dists.x * dists.x + dists.z*dists.z;
             }
         }
 
@@ -347,13 +358,18 @@ public class Road : MonoBehaviour
 
         // we are going to start at the starting point
         notVisited.push(startingPosition.y*gridSize+startingPosition.x, 0f);
-        int oldIndex = -1;
-        visited[endingPosition.y * gridSize + endingPosition.x] = false;
+        nodes[startingPosition.y * gridSize + startingPosition.x].dist = 0.0f;
+
+        // Initializing variables for the loop to save memory
+        int oldIndex;
         int count = 0;
-        int x = 0;
-        int z = 0;
-        Vector3 relativeDist = new Vector3();
-        float newDist = float.PositiveInfinity;
+        int x;
+        int z;
+        Vector3 relativeDist;
+        float relativeHeight;
+        float roadDist;
+        float tunnelDist;
+        
         while (notVisited.lastIndex > 0 && !visited[endingPosition.y * gridSize + endingPosition.x])
         {
             oldIndex = notVisited.pop();
@@ -370,21 +386,39 @@ public class Road : MonoBehaviour
                     if (x < 0 || x >= gridSize || z < 0 || z >= gridSize) continue;
                     index = z * gridSize + x;
                     if (visited[index]) continue;
-                    if (oldIndex == index) continue;
-                    if (i * i + j * j < innerRadius * innerRadius) continue;
-                    if (i * i + j * j > outerRadius * outerRadius) continue;
+                    //if (oldIndex == index) continue;
+                    if (Math.Abs(i) <= innerRadius && Math.Abs(j) <= innerRadius) continue;
                     relativeDist = nodes[index].pos - nodes[oldIndex].pos;
-                    newDist = nodes[oldIndex].dist + evalSlope(relativeDist)*relativeDist.sqrMagnitude;
-                    if (newDist < nodes[index].dist)
+                    relativeHeight = nodes[index].mapHeight - nodes[oldIndex].mapHeight;
+                    Vector3 direction = new Vector3(relativeDist.x, relativeHeight, relativeDist.z).normalized;
+                    roadDist = nodes[oldIndex].dist + evalSlope(direction)*relativeDist.sqrMagnitude;
+                    tunnelDist = nodes[oldIndex].dist + evalTunnel(relativeHeight) * relativeDist.sqrMagnitude;
+                    if (roadDist < nodes[index].dist && roadDist < tunnelDist)
                     {
-                        nodes[index].dist = newDist;
+                        nodes[index].dist = roadDist;
                         nodes[index].predIdx = oldIndex;
-                        notVisited.push(index, newDist);
+                        notVisited.push(index, roadDist);
+                        nodes[index].roadType = RoadNodeType.Road;
+                    }
+                    else
+                    {
+                        if (tunnelDist < nodes[index].dist)
+                        {
+                            nodes[index].dist = tunnelDist;
+                            nodes[index].predIdx = oldIndex;
+                            notVisited.push(index, tunnelDist);
+                            nodes[index].roadType = RoadNodeType.Tunnel;
+                        }
                     }
                 }
             }
             visited[oldIndex] = true;
             count++;
+        }
+
+        if (nodes[endingPosition.y * gridSize + endingPosition.x].predIdx == -1)
+        {
+            throw new Exception("No path found");
         }
     }
 
@@ -393,7 +427,7 @@ public class Road : MonoBehaviour
         dirVec.y = Mathf.Abs(dirVec.y);
         dirVec.Normalize();
 
-        // If the slope is above very natural 60 degrees we do not want a path going up there (or down there)
+        // If the slope is above 30 degrees we do not want a path going up there (or down there)
         if(dirVec.y > 0.5f)
         {
             return float.PositiveInfinity;
@@ -404,8 +438,14 @@ public class Road : MonoBehaviour
         }
     }
 
-    private float evalTunnel(Vector3 dirVec)
+    private float evalTunnel(float height)
     {
-        return 1f;
+        height = Mathf.Abs(height);
+        if (height < 3f) return float.PositiveInfinity;
+        if (height < 8f)
+            return height * 0.5f;
+        if (height <= 15f)
+            return 4f + (height - 8f) * 0.25f;
+        return float.PositiveInfinity;
     }
 }
