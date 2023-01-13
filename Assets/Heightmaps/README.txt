@@ -2,7 +2,7 @@ Get map from: https://heightmap.skydark.pl/
 Use gray selection area
 
 IMPORTANT: Set settings to:
-Map size: 8km
+Map size: 2km
 Base level: 0m
 Height scale: 100%
 

@@ -87,7 +87,7 @@ public class Plant : IQuadTreeObject
 
     private (float height, Vector3 normal) RaycastAtPosition(Vector2 position)
     {
-        const int maxHeight = 3000; // Height "Zugspitze" in m
+        const int maxHeight = 1025; // Limited by the heightmap resolution
         var height = 0f;
         var normal = Vector3.zero;
         var ray = new Ray(new Vector3(position.x, maxHeight, position.y), Vector3.down);
