@@ -4,10 +4,13 @@ using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.Diagnostics.Tracing;
 using System.Linq;
+using System.Net.Mail;
 using System.Runtime.InteropServices.WindowsRuntime;
+using TreeEditor;
 using Unity.VisualScripting;
 using Unity.VisualScripting.FullSerializer;
 using Unity.VisualScripting.ReorderableList.Element_Adder_Menu;
+using UnityEditor;
 using UnityEditor.Experimental.GraphView;
 using UnityEngine;
 using UnityEngine.Analytics;
@@ -251,6 +254,113 @@ public struct NodeHeap
         return result;
     }
 }
+
+public struct RoadSegments
+{
+    private List<Vector3> nodes;
+    public List<Vector3> normals;
+    public List<Vector3> Vertices;
+    public List<int> triangles;
+    public List<Vector2> uvs;
+
+    public RoadSegments(List<Vector3> _nodes, List<Vector3> _normals)
+    {
+        nodes = _nodes;
+
+        Vertices = new List<Vector3>();
+        triangles = new List<int>();
+        normals = new List<Vector3>();
+        uvs = new List<Vector2>();
+        Vector3 firstNode = nodes[0];
+        Vector3 secondNode = nodes[1];
+
+        Vector3 middleNode = (nodes[1] - nodes[0]) / 2;
+
+        Vector3 dirVec = middleNode.normalized;
+
+        Vector3 perpen = Vector3.Cross(dirVec, _normals[0]);
+
+        Vertices.Add((firstNode - middleNode) + perpen * 2f);
+        Vertices.Add((firstNode - middleNode) + perpen * -2f);
+
+        normals.Add(_normals[0]);
+        normals.Add(_normals[0]);
+
+        uvs.Add(new Vector2(0, 0));
+        uvs.Add(new Vector2(1, 0));
+
+        bool alternateForUVs = false;
+        for (int i = 0; i < nodes.Count - 1; i++)
+        {
+            firstNode = nodes[i];
+            secondNode = nodes[i + 1];
+
+            middleNode = (nodes[i + 1] - nodes[i])/2;
+
+            dirVec = middleNode.normalized;
+
+            perpen = Vector3.Cross(dirVec, _normals[i]);
+
+            Vertices.Add((firstNode + middleNode) + perpen * 2f);
+            Vertices.Add((firstNode + middleNode) + perpen * -2f);
+
+            normals.Add((_normals[i] + _normals[i+1])/2);
+            normals.Add((_normals[i] + _normals[i + 1]) / 2);
+
+            if (alternateForUVs)
+            {
+                uvs.Add(new Vector2(0, 0));
+                uvs.Add(new Vector2(1, 0));
+                alternateForUVs = false;
+            }
+            else
+            {
+                uvs.Add(new Vector2(0, 1));
+                uvs.Add(new Vector2(1, 1));
+                alternateForUVs = true;
+            }
+        }
+
+        for (int i = 0; i < Vertices.Count - 3; i++)
+        {
+            triangles.Add(i);
+            triangles.Add(i + 1);
+            triangles.Add(i + 2);
+
+            triangles.Add(i + 1);
+            triangles.Add(i + 3);
+            triangles.Add(i + 2);
+        }
+    }
+
+    public void addSegment(Vector3 newNode, Vector3 normal)
+    {
+        nodes.Add(newNode);
+        
+        Vector3 firstNode = nodes[nodes.Count - 2];
+        Vector3 middleNode = (newNode - nodes[nodes.Count - 2]) / 2;
+
+        Vertices.Add((firstNode + middleNode) + new Vector3(0, 0, 0.5f));
+        Vertices.Add((firstNode + middleNode) + new Vector3(0, 0, -0.5f));
+
+        triangles.Add(Vertices.Count - 4);
+        triangles.Add(Vertices.Count - 3);
+        triangles.Add(Vertices.Count - 2);
+
+        triangles.Add(Vertices.Count - 3);
+        triangles.Add(Vertices.Count - 2);
+        triangles.Add(Vertices.Count - 1);
+
+        normals.Add((normals[normals.Count - 1] + normal) / 2);
+        normals.Add((normals[normals.Count - 1] + normal) / 2);
+    }
+
+    public int getSegmentCount()
+    {
+        return nodes.Count - 1;
+    }
+}
+    
 public class Road : MonoBehaviour
 {
     private int gridSize;

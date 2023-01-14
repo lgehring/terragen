@@ -8,7 +8,11 @@ using UnityEngine;
 using static UnityEngine.GraphicsBuffer;
 using System.Linq;
 using UnityEngine.Splines;
+using System.Security.Cryptography;
 
+/// <summary>
+/// Generates a spline with a road mesh
+/// </summary>
 public class RoadGenerator : MonoBehaviour
 {
     GameObject startingPoint;
@@ -25,6 +29,10 @@ public class RoadGenerator : MonoBehaviour
             gridSizeInMeters = 2410;
         }
     }
+    /// <summary>
+    /// Creates a spline extrapolates a road mesh onto it and adds it to the scene
+    /// </summary>
+    /// <exception cref="ArgumentException"> Throws an exception if the road has to many nodes </exception>
     public void drawRoadMesh()
     {
         startingPoint = this.GetComponentsInChildren<Transform>()[1].gameObject;
@@ -113,11 +121,12 @@ public class RoadGenerator : MonoBehaviour
             }
         }
         generateSpline(path, normals);
+        generateRoadMesh(path, normals);
     }
 
     private void generateSpline(List<Vector3> points, List<Vector3> normals)
     {
-        GameObject spline = new GameObject("Road");
+        /*GameObject spline = new GameObject("Road");
         spline.transform.parent = this.transform;
         spline.GetOrAddComponent<SplineContainer>();
         var splineObj = spline.GetComponent<SplineContainer>().Spline;
@@ -130,7 +139,44 @@ public class RoadGenerator : MonoBehaviour
         var splineMesh = spline.GetComponent<SplineExtrude>();
         splineMesh.Radius = 2f;
         splineMesh.Rebuild();
-
+        */
         
+    }
+
+    private void generateRoadMesh(List<Vector3> points, List<Vector3> normals)
+    {
+        RoadSegments segments = new RoadSegments(points, normals);
+
+        GameObject roadMesh = new GameObject("Road");
+
+        roadMesh.transform.parent = this.transform;
+
+        roadMesh.AddComponent<MeshFilter>();
+
+        MeshFilter mf = roadMesh.GetComponent<MeshFilter>();
+        if(mf.sharedMesh == null)
+        {
+            mf.sharedMesh = new Mesh();
+        }
+        Mesh mesh = mf.sharedMesh;
+
+        mesh.Clear();
+
+        mesh.vertices = segments.Vertices.ToArray();
+        mesh.normals = segments.normals.ToArray();
+        mesh.uv = segments.uvs.ToArray();
+        mesh.triangles = segments.triangles.ToArray();
+
+        mf.sharedMesh = mesh;
+
+        roadMesh.AddComponent<MeshRenderer>();
+
+        MeshRenderer render = roadMesh.GetComponent<MeshRenderer>();
+        Material mat = (Material) Resources.Load("Materials/Road Material");
+        Texture2D roadTex = (Texture2D) Resources.Load("Stolen_Road_texture");
+        render.sharedMaterial = mat;
+        render.sharedMaterial.mainTexture = roadTex;
+
+
     }
 }
