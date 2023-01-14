@@ -25,7 +25,10 @@ public class Ecosystem : MonoBehaviour
     private void Awake()
     {
         // Redefine bounds TODO: like mesh, move somewhere else
-        bounds = new Rect(-1205, -1205, 2410, 2410); // 2.41 km x 2.41 km ~ 5.81 km^2
+        // get mapChunkSize from MapGenerator
+        var ecoSize = MapGenerator.mapChunkSize * 10;
+        
+        bounds = new Rect(-ecoSize / 2, -ecoSize / 2, ecoSize, ecoSize);
 
         // Initialize quadtree with ecosystem bounds and maximum plants per node
         plantsQuadTree = new QuadTree<Plant>(50, bounds); // 50 was optimal for 20 iterations
@@ -58,8 +61,8 @@ public class Ecosystem : MonoBehaviour
             new(
                 "Tree",
                 Vector2.zero,
+                8.0f,
                 5.0f,
-                3.0f,
                 6.0f,
                 20.0f,
                 1,
