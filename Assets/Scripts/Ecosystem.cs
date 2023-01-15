@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using System.Linq;
 using UnityEngine;
 
 /// <summary>
@@ -18,24 +17,25 @@ public class Ecosystem : MonoBehaviour
     public Rect bounds;
     public double time;
     public bool instantiateLive;
+    public int count;
     private List<Plant> _plantTemplates;
-    public QuadTree<Plant> plantsQuadTree;
+    public Plant[,] plantsMatrix;
 
     // Awake is called when the script instance is being loaded
     private void Awake()
     {
         // Redefine bounds TODO: like mesh, move somewhere else
         // get mapChunkSize from MapGenerator
-        var ecoSize = MapGenerator.mapChunkSize * 10;
-        
+        var ecoSize = MapGenerator.mapChunkSize * 10; // in meters
+
         bounds = new Rect(-ecoSize / 2, -ecoSize / 2, ecoSize, ecoSize);
 
-        // Initialize quadtree with ecosystem bounds and maximum plants per node
-        plantsQuadTree = new QuadTree<Plant>(50, bounds); // 50 was optimal for 20 iterations
+        // Initialize plantMatrix with nulls
+        plantsMatrix = new Plant[(int)bounds.width, (int)bounds.height]; // decimeter resolution
 
         // Set instantiateLive to false for performance 
         instantiateLive = false;
-        
+
         // Get mesh Collider
         var meshCollider = GameObject.Find("Mesh").GetComponent<MeshCollider>();
 
@@ -43,11 +43,9 @@ public class Ecosystem : MonoBehaviour
         _plantTemplates = new List<Plant>
         {
             new(
-                "Grass", 
+                "Grass",
                 Vector2.zero, //TODO: calc height here instead of in plant
-                1.0f,
-                0.5f,
-                1.5f,
+                1,
                 5.0f,
                 5,
                 3.0,
@@ -61,9 +59,7 @@ public class Ecosystem : MonoBehaviour
             new(
                 "Tree",
                 Vector2.zero,
-                8.0f,
-                5.0f,
-                6.0f,
+                8,
                 20.0f,
                 1,
                 5.0,
@@ -76,69 +72,90 @@ public class Ecosystem : MonoBehaviour
         };
     }
 
-    // Draw debugging information for the quadtree
-    // Called automatically by Unity when the object is selected in the editor
-    private void OnDrawGizmosSelected()
+    // A function that translates a position in the world to a position in the plant matrix
+    private Vector2Int WorldToMatrix(Vector2 worldPos)
     {
-        plantsQuadTree.DrawDebug();
+        return new Vector2Int(
+            (int)(worldPos.x + bounds.width / 2),
+            (int)(worldPos.y + bounds.height / 2));
     }
 
     // Performs full single step of the ecosystem simulation
     public void EvolveEcosystem()
     {
-        // Generate new plants from seeds and add them to the ecosystem if they are within the bounds
-        foreach (var seed in plantsQuadTree.GetAllElements().Select(plant => plant.GenerateSeeds())
-                     .SelectMany(seeds => seeds))
-            if (bounds.Contains(seed.GetPosition()))
-            {
-                plantsQuadTree.Insert(seed);
-                if (instantiateLive) seed.Instantiate();
-            }
-            else
-            {
-                seed.Die();
-            }
-
-        // Remove plants that collide with other plants
-        RemoveCollisions();
-        // Grow all plants and remove old ones and seeds that have unsuitable conditions
-        foreach (var plant in from plant in plantsQuadTree.GetAllElements()
-                 let dies = plant.Grow()
-                 where dies
-                 select plant)
-            plantsQuadTree.Remove(plant);
-
-        // Advance time
-        time += DeltaT;
-    }
-
-    // Check for colliding plants and kill them
-    private void RemoveCollisions()
-    {
-        // For each plant get the colliding plants
-        foreach (var plant in plantsQuadTree.GetAllElements())
+        var newSeeds = new List<Plant>();
+        for (var i = 0; i < plantsMatrix.GetLength(0); i++)
+        for (var j = 0; j < plantsMatrix.GetLength(1); j++)
         {
-            var collidingPlants = plantsQuadTree.RetrieveObjectsInArea(plant.MaxBounds);
-
-            // Check for collisions with each colliding plant
-            foreach (var collidingPlant in collidingPlants)
+            // Skip cell if plant does not exist
+            if (plantsMatrix[i, j] == null) continue;
+            
+            // Remove collisions
+            var collisionPositions = GetCollisionsInRadius(new[] { i, j }, plantsMatrix[i, j].Radius);
+            foreach (var collisionPosition in collisionPositions)
             {
-                if (collidingPlant == plant) continue;
-
-                var loser = plant.Collides(collidingPlant);
-                switch (loser)
+                var winsFight = plantsMatrix[i, j].Fight(plantsMatrix[collisionPosition[0], collisionPosition[1]]);
+                if (winsFight)
                 {
-                    case 1:
-                        plant.Die();
-                        plantsQuadTree.Remove(plant);
-                        break;
-                    case 2:
-                        collidingPlant.Die();
-                        plantsQuadTree.Remove(collidingPlant);
-                        break;
+                    plantsMatrix[collisionPosition[0], collisionPosition[1]] = null;
+                }
+                else
+                {
+                    plantsMatrix[i, j] = null;
+                    break;
                 }
             }
+            
+            // Check if plant still exists
+            if (plantsMatrix[i, j] == null) continue;
+
+            // Generate new seeds
+            newSeeds.AddRange(plantsMatrix[i, j].GenerateSeeds());
+            
+            // Grow plant, remove old plants
+            if (!plantsMatrix[i, j].Grow()) continue;
+            plantsMatrix[i, j] = null;
         }
+
+        // For each seed
+        foreach (var seed in newSeeds)
+        {
+            // Check if seed is within bounds
+            if (!bounds.Contains(seed.Position))
+            {
+                seed.Die();
+                continue;
+            }
+
+            // If there is no plant at the position of the seed, add the seed to the ecosystem
+            var seedMatrixPosition = WorldToMatrix(seed.Position);
+            plantsMatrix[seedMatrixPosition.x, seedMatrixPosition.y] ??= seed;
+            if (instantiateLive) seed.Instantiate();
+        }
+
+        // Advance time, update number of existing plants
+        time += DeltaT;
+        UpdateCount();
+    }
+
+    private IEnumerable<int[]> GetCollisionsInRadius(IReadOnlyList<int> pos, int radius)
+    {
+        var cells = new List<int[]>();
+        var radiusSquared = radius * radius;
+        var lowerBoundX = Mathf.Max(0, pos[0] - radius);
+        var upperBoundX = Mathf.Min(plantsMatrix.GetLength(0) - 1, pos[0] + radius);
+        var lowerBoundY = Mathf.Max(0, pos[1] - radius);
+        var upperBoundY = Mathf.Min(plantsMatrix.GetLength(1) - 1, pos[1] + radius);
+        for (var i = lowerBoundX; i <= upperBoundX; i++)
+        for (var j = lowerBoundY; j <= upperBoundY; j++)
+        {
+            if (i == pos[0] && j == pos[1]) continue;
+            if ((i - pos[0]) * (i - pos[0]) + (j - pos[1]) * (j - pos[1]) > radiusSquared) continue;
+            if (plantsMatrix[i, j] == null) continue;
+            cells.Add(new[] { i, j });
+        }
+
+        return cells;
     }
 
     // Initially seed the ecosystem randomly with a few plants from the templates
@@ -148,18 +165,34 @@ public class Ecosystem : MonoBehaviour
         {
             var plantIndex = Random.Range(0, _plantTemplates.Count);
             // Randomize position
-            var x = Random.Range(bounds.xMin, bounds.xMax);
-            var y = Random.Range(bounds.yMin, bounds.yMax);
+            var x = (int)Random.Range(bounds.xMin, bounds.xMax);
+            var y = (int)Random.Range(bounds.yMin, bounds.yMax);
             // Deep copy the plant template
             var newPlant = _plantTemplates[plantIndex].Clone(new Vector2(x, y));
-            plantsQuadTree.Insert(newPlant);
+            // Add the plant to the ecosystem
+            var matrixPosition = WorldToMatrix(newPlant.GetPosition());
+            plantsMatrix[matrixPosition.x, matrixPosition.y] = newPlant;
             if (instantiateLive) newPlant.Instantiate();
         }
+
+        UpdateCount();
     }
 
     // Instantiate plants
     public void Instantiate()
     {
-        foreach (var plant in plantsQuadTree.GetAllElements()) plant.Instantiate();
+        for (var i = 0; i < plantsMatrix.GetLength(0); i++)
+        for (var j = 0; j < plantsMatrix.GetLength(1); j++)
+            if (plantsMatrix[i, j] != null)
+                plantsMatrix[i, j].Instantiate();
+    }
+
+    public void UpdateCount()
+    {
+        count = 0;
+        for (var i = 0; i < plantsMatrix.GetLength(0); i++)
+        for (var j = 0; j < plantsMatrix.GetLength(1); j++)
+            if (plantsMatrix[i, j] != null)
+                count++;
     }
 }

@@ -14,7 +14,8 @@ public class EcosystemEditor : Editor
 
         // Show info
         EditorGUILayout.LabelField("Ecosystem", EditorStyles.boldLabel);
-        EditorGUILayout.LabelField("Number of plants", ecosystem.plantsQuadTree.GetAllElements().Count.ToString());
+        // Non-null martrix entries
+        EditorGUILayout.LabelField("Number of plants", ecosystem.count.ToString(CultureInfo.InvariantCulture));
         EditorGUILayout.LabelField("Time", ecosystem.time.ToString(CultureInfo.InvariantCulture));
         EditorGUILayout.LabelField("Bounds", ecosystem.bounds.ToString());
 
