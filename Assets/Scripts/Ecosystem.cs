@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using UnityEditor;
 using UnityEngine;
 
 /// <summary>
@@ -18,20 +19,22 @@ public class Ecosystem : MonoBehaviour
     public double time;
     public bool instantiateLive;
     public int count;
-    private List<Plant> _plantTemplates;
-    public Plant[,] plantsMatrix;
+    private List<Plant> _plantTemplates; // TODO: remove after BetterPlants are implemented
+    private Plant[,] _plantsMatrix;
 
     // Awake is called when the script instance is being loaded
     private void Awake()
     {
-        // Redefine bounds TODO: like mesh, move somewhere else
-        // get mapChunkSize from MapGenerator
+        // Create plant prefabs
+        InstantiatePlantPrefabs();
+        
+        // Redefine bounds
         var ecoSize = MapGenerator.mapChunkSize * 10; // in meters
 
         bounds = new Rect(-ecoSize / 2, -ecoSize / 2, ecoSize, ecoSize);
 
         // Initialize plantMatrix with nulls
-        plantsMatrix = new Plant[(int)bounds.width, (int)bounds.height]; // decimeter resolution
+        _plantsMatrix = new Plant[(int)bounds.width, (int)bounds.height]; // decimeter resolution
 
         // Set instantiateLive to false for performance 
         instantiateLive = false;
@@ -45,7 +48,7 @@ public class Ecosystem : MonoBehaviour
             new(
                 "Grass",
                 Vector2.zero, //TODO: calc height here instead of in plant
-                1,
+                2,
                 5.0f,
                 5,
                 3.0,
@@ -84,37 +87,37 @@ public class Ecosystem : MonoBehaviour
     public void EvolveEcosystem()
     {
         var newSeeds = new List<Plant>();
-        for (var i = 0; i < plantsMatrix.GetLength(0); i++)
-        for (var j = 0; j < plantsMatrix.GetLength(1); j++)
+        for (var i = 0; i < _plantsMatrix.GetLength(0); i++)
+        for (var j = 0; j < _plantsMatrix.GetLength(1); j++)
         {
             // Skip cell if plant does not exist
-            if (plantsMatrix[i, j] == null) continue;
-            
+            if (_plantsMatrix[i, j] == null) continue;
+
             // Remove collisions
-            var collisionPositions = GetCollisionsInRadius(new[] { i, j }, plantsMatrix[i, j].Radius);
+            var collisionPositions = GetCollisionsInRadius(new[] { i, j }, _plantsMatrix[i, j].Radius);
             foreach (var collisionPosition in collisionPositions)
             {
-                var winsFight = plantsMatrix[i, j].Fight(plantsMatrix[collisionPosition[0], collisionPosition[1]]);
+                var winsFight = _plantsMatrix[i, j].Fight(_plantsMatrix[collisionPosition[0], collisionPosition[1]]);
                 if (winsFight)
                 {
-                    plantsMatrix[collisionPosition[0], collisionPosition[1]] = null;
+                    _plantsMatrix[collisionPosition[0], collisionPosition[1]] = null;
                 }
                 else
                 {
-                    plantsMatrix[i, j] = null;
+                    _plantsMatrix[i, j] = null;
                     break;
                 }
             }
-            
+
             // Check if plant still exists
-            if (plantsMatrix[i, j] == null) continue;
+            if (_plantsMatrix[i, j] == null) continue;
 
             // Generate new seeds
-            newSeeds.AddRange(plantsMatrix[i, j].GenerateSeeds());
-            
+            newSeeds.AddRange(_plantsMatrix[i, j].GenerateSeeds());
+
             // Grow plant, remove old plants
-            if (!plantsMatrix[i, j].Grow()) continue;
-            plantsMatrix[i, j] = null;
+            if (!_plantsMatrix[i, j].Grow()) continue;
+            _plantsMatrix[i, j] = null;
         }
 
         // For each seed
@@ -129,7 +132,7 @@ public class Ecosystem : MonoBehaviour
 
             // If there is no plant at the position of the seed, add the seed to the ecosystem
             var seedMatrixPosition = WorldToMatrix(seed.Position);
-            plantsMatrix[seedMatrixPosition.x, seedMatrixPosition.y] ??= seed;
+            _plantsMatrix[seedMatrixPosition.x, seedMatrixPosition.y] ??= seed;
             if (instantiateLive) seed.Instantiate();
         }
 
@@ -143,15 +146,15 @@ public class Ecosystem : MonoBehaviour
         var cells = new List<int[]>();
         var radiusSquared = radius * radius;
         var lowerBoundX = Mathf.Max(0, pos[0] - radius);
-        var upperBoundX = Mathf.Min(plantsMatrix.GetLength(0) - 1, pos[0] + radius);
+        var upperBoundX = Mathf.Min(_plantsMatrix.GetLength(0) - 1, pos[0] + radius);
         var lowerBoundY = Mathf.Max(0, pos[1] - radius);
-        var upperBoundY = Mathf.Min(plantsMatrix.GetLength(1) - 1, pos[1] + radius);
+        var upperBoundY = Mathf.Min(_plantsMatrix.GetLength(1) - 1, pos[1] + radius);
         for (var i = lowerBoundX; i <= upperBoundX; i++)
         for (var j = lowerBoundY; j <= upperBoundY; j++)
         {
             if (i == pos[0] && j == pos[1]) continue;
             if ((i - pos[0]) * (i - pos[0]) + (j - pos[1]) * (j - pos[1]) > radiusSquared) continue;
-            if (plantsMatrix[i, j] == null) continue;
+            if (_plantsMatrix[i, j] == null) continue;
             cells.Add(new[] { i, j });
         }
 
@@ -171,7 +174,7 @@ public class Ecosystem : MonoBehaviour
             var newPlant = _plantTemplates[plantIndex].Clone(new Vector2(x, y));
             // Add the plant to the ecosystem
             var matrixPosition = WorldToMatrix(newPlant.GetPosition());
-            plantsMatrix[matrixPosition.x, matrixPosition.y] = newPlant;
+            _plantsMatrix[matrixPosition.x, matrixPosition.y] = newPlant;
             if (instantiateLive) newPlant.Instantiate();
         }
 
@@ -181,18 +184,32 @@ public class Ecosystem : MonoBehaviour
     // Instantiate plants
     public void Instantiate()
     {
-        for (var i = 0; i < plantsMatrix.GetLength(0); i++)
-        for (var j = 0; j < plantsMatrix.GetLength(1); j++)
-            if (plantsMatrix[i, j] != null)
-                plantsMatrix[i, j].Instantiate();
+        for (var i = 0; i < _plantsMatrix.GetLength(0); i++)
+        for (var j = 0; j < _plantsMatrix.GetLength(1); j++)
+            if (_plantsMatrix[i, j] != null)
+                _plantsMatrix[i, j].Instantiate();
     }
 
-    public void UpdateCount()
+    private void UpdateCount()
     {
         count = 0;
-        for (var i = 0; i < plantsMatrix.GetLength(0); i++)
-        for (var j = 0; j < plantsMatrix.GetLength(1); j++)
-            if (plantsMatrix[i, j] != null)
+        for (var i = 0; i < _plantsMatrix.GetLength(0); i++)
+        for (var j = 0; j < _plantsMatrix.GetLength(1); j++)
+            if (_plantsMatrix[i, j] != null)
                 count++;
+    }
+
+    public void InstantiatePlantPrefabs()
+    {
+        foreach (var type in PlantData.Data.Keys)
+        {
+            var plantInfo = PlantData.Get(type);
+            var plantModel = AssetDatabase.LoadAssetAtPath<GameObject>(plantInfo.modelPath);
+            var prefab = Instantiate(plantModel, transform);
+            prefab.name = plantInfo.type + "_prefab";
+            var plantInfoComponent = prefab.AddComponent<PlantInfo>();
+            plantInfoComponent.plantData = plantInfo;
+            PrefabUtility.SaveAsPrefabAsset(prefab, "Assets/Plants/" + plantInfo.type + ".prefab");
+        }
     }
 }

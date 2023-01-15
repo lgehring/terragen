@@ -30,5 +30,7 @@ public class EcosystemEditor : Editor
                 ecosystem.EvolveEcosystem();
 
         if (GUILayout.Button("Instantiate")) ecosystem.Instantiate();
+        
+        if (GUILayout.Button("UpdatePlantPrefabs")) ecosystem.InstantiatePlantPrefabs();
     }
 }

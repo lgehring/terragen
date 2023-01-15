@@ -4,7 +4,7 @@ using UnityEngine;
 /// <summary>
 ///     A class defining a single plant object and its ecological properties.
 /// </summary>
-public class Plant : IQuadTreeObject
+public class Plant
 {
     // Constructor
     public Plant(string name, Vector2 position, int radius,
@@ -19,10 +19,10 @@ public class Plant : IQuadTreeObject
         MaxAge = maxAge;
         Age = 0;
         Prefab = prefab;
-        MaxBounds = new Rect((float)(position.x - radius),
-            (float)(position.y - radius),
-            (float)(radius * 2),
-            (float)(radius * 2));
+        MaxBounds = new Rect(position.x - radius,
+            position.y - radius,
+            radius * 2,
+            radius * 2);
         MinSlope = minSlope;
         MaxSlope = maxSlope;
         MinHeight = minHeight;
@@ -77,7 +77,7 @@ public class Plant : IQuadTreeObject
         var bounds = meshFilter.mesh.bounds;
         var maxExtent = Mathf.Max(bounds.size.x, bounds.size.z);
         var scale = Radius / maxExtent;
-        GameObject.transform.localScale = new Vector3((float)scale, (float)scale, (float)scale);
+        GameObject.transform.localScale = new Vector3(scale, scale, scale);
         GameObject.transform.position = new Vector3(Position.x, (float)Height, Position.y);
     }
 

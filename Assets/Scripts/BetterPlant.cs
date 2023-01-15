@@ -1,5 +1,5 @@
-﻿// using UnityEngine;
-// using System.Collections.Generic;
+﻿// using System.Collections.Generic;
+// using UnityEngine;
 //
 // public class PlantPool : MonoBehaviour {
 //     private readonly Stack<Plant> _availablePlants = new();
@@ -33,31 +33,26 @@
 //
 //     public void ReturnPlant(Plant plant) {
 //         plant.Reset();
-//         plant.isActive = false;
 //         plant.gameObject.SetActive(false);
 //         _availablePlants.Push(plant);
 //     }
 // }
 //
 // public class Plant : MonoBehaviour, IQuadTreeObject {
-//     public new string name;
-//     public Vector2 position;
-//     public float radius;
 //     public bool isActive;
+//     public PlantInfo info;
+//     public Vector2 position;
 //
 //     public void Initialize(string type) {
-//         this.isActive = true;
-//         // Get the plant data from dictionary
-//         this.name = name;
-//         this.position = position;
-//         this.radius = radius;
+//         isActive = true;
+//         info = PlantInfo.Get(type);
 //     }
 //
 //     public void Reset()
 //     {
-//         name = null;
+//         isActive = false;
+//         info = null;
 //         position = Vector2.zero;
-//         radius = 0;
 //     }
 //     
 //     public Vector2 GetPosition() {
