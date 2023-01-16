@@ -36,17 +36,19 @@ public static class NoiseMapReader
         // Return the noise map
         return smoothMap;
     }
-    
-    
+
+
     // Adapted from: http://answers.unity.com/answers/890986/view.html
-    private static Texture2D ScaleTexture(Texture2D source,int mapChunkSize) {
-        var result=new Texture2D(mapChunkSize,mapChunkSize,source.format,false);
-        for (var i = 0; i < result.height; ++i) {
-            for (var j = 0; j < result.width; ++j) {
-                var newColor = source.GetPixelBilinear(j / (float)result.width, i / (float)result.height);
-                result.SetPixel(j, i, newColor);
-            }
+    private static Texture2D ScaleTexture(Texture2D source, int mapChunkSize)
+    {
+        var result = new Texture2D(mapChunkSize, mapChunkSize, source.format, false);
+        for (var i = 0; i < result.height; ++i)
+        for (var j = 0; j < result.width; ++j)
+        {
+            var newColor = source.GetPixelBilinear(j / (float)result.width, i / (float)result.height);
+            result.SetPixel(j, i, newColor);
         }
+
         result.Apply();
         return result;
     }

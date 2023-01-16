@@ -1,19 +1,6 @@
 using System;
-using System.Collections;
 using System.Collections.Generic;
-using System.Collections.Specialized;
-using System.Diagnostics.Tracing;
-using System.Linq;
-using System.Net.Mail;
-using System.Runtime.InteropServices.WindowsRuntime;
-using TreeEditor;
-using Unity.VisualScripting;
-using Unity.VisualScripting.FullSerializer;
-using Unity.VisualScripting.ReorderableList.Element_Adder_Menu;
-using UnityEditor;
-using UnityEditor.Experimental.GraphView;
 using UnityEngine;
-using UnityEngine.Analytics;
 
 public enum RoadNodeType
 {
@@ -21,7 +8,9 @@ public enum RoadNodeType
     Tunnel,
     Bridge
 }
-public struct RoadNode {
+
+public struct RoadNode
+{
     public Vector3 pos;
     public float heuristic;
     public int idx;
@@ -31,6 +20,7 @@ public struct RoadNode {
     public bool isValid;
     public RoadNodeType roadType;
     public float mapHeight;
+
     public RoadNode(int _idx)
     {
         pos = new Vector3(0.0f, 0.0f, 0.0f);
@@ -44,6 +34,7 @@ public struct RoadNode {
         mapHeight = 0.0f;
     }
 }
+
 public struct GridBounds
 {
     public int lowerX;
@@ -65,7 +56,7 @@ public struct NodeHeap
     // Currently this is a priority queue
     public int[] elements;
     public float[] dist;
-    private int size;
+    private readonly int size;
     public int lastIndex;
     public int popcount;
 
@@ -80,42 +71,26 @@ public struct NodeHeap
 
     public void push(int idx, float _dist)
     {
-        for (int i = 0; i < lastIndex; i++)
-        {
+        for (var i = 0; i < lastIndex; i++)
             if (elements[i] == idx)
             {
-                if (dist[i] < _dist)
-                {
-                    throw new Exception("New distance is somehow bigger then previous distance");
-                }
+                if (dist[i] < _dist) throw new Exception("New distance is somehow bigger then previous distance");
                 dist[i] = _dist;
-                for(int j = i; j > 0; j--)
-                {
-                    if(dist[j] < dist[j - 1])
-                    {
-                        swap(j,j-1);
-                    }
+                for (var j = i; j > 0; j--)
+                    if (dist[j] < dist[j - 1])
+                        swap(j, j - 1);
                     else
-                    {
                         break;
-                    }
-                }
                 return;
             }
-        }
+
         elements[lastIndex] = idx;
         dist[lastIndex++] = _dist;
-        for(int i = lastIndex-1; i > 0; i--)
-        {
+        for (var i = lastIndex - 1; i > 0; i--)
             if (dist[i] < dist[i - 1])
-            {
                 swap(i, i - 1);
-            }
             else
-            {
                 break;
-            }
-        }
 
         /*
         int currentIndex = -1;
@@ -185,11 +160,8 @@ public struct NodeHeap
 
     public int pop()
     {
-        int firstElement = elements[0];
-        for(int i = 0; i < lastIndex-1; i++)
-        {
-            swap(i, i + 1);
-        }
+        var firstElement = elements[0];
+        for (var i = 0; i < lastIndex - 1; i++) swap(i, i + 1);
         lastIndex--;
         return firstElement;
         /*int firstElement =  elements[0];
@@ -222,42 +194,39 @@ public struct NodeHeap
 
     public float allElementsBigger(float _dist)
     {
-        for(int i = 0; i < lastIndex; i++)
-        {
+        for (var i = 0; i < lastIndex; i++)
             if (dist[i] < _dist)
-            {
                 return _dist - dist[i];
-            }
-        }
         return -1;
     }
 
     public void swap(int currentIndex, int nextIndex)
     {
-        int tempIdx = elements[nextIndex];
-        float tempDist = dist[nextIndex];
+        var tempIdx = elements[nextIndex];
+        var tempDist = dist[nextIndex];
         elements[nextIndex] = elements[currentIndex];
         dist[nextIndex] = dist[currentIndex];
         elements[currentIndex] = tempIdx;
         dist[currentIndex] = tempDist;
     }
 
-    public String distArrayAsString()
+    public string distArrayAsString()
     {
-        String result = "";
+        var result = "";
 
-        for(int i = 0; i < lastIndex; i++)
+        for (var i = 0; i < lastIndex; i++)
         {
             result += dist[i];
             result += ", ";
         }
+
         return result;
     }
 }
 
 public struct RoadSegments
 {
-    private List<Vector3> nodes;
+    private readonly List<Vector3> nodes;
     public List<Vector3> normals;
     public List<Vector3> Vertices;
     public List<int> triangles;
@@ -271,17 +240,17 @@ public struct RoadSegments
         triangles = new List<int>();
         normals = new List<Vector3>();
         uvs = new List<Vector2>();
-        Vector3 firstNode = nodes[0];
-        Vector3 secondNode = nodes[1];
+        var firstNode = nodes[0];
+        var secondNode = nodes[1];
 
-        Vector3 middleNode = (nodes[1] - nodes[0]) / 2;
+        var middleNode = (nodes[1] - nodes[0]) / 2;
 
-        Vector3 dirVec = middleNode.normalized;
+        var dirVec = middleNode.normalized;
 
-        Vector3 perpen = Vector3.Cross(dirVec, _normals[0]);
+        var perpen = Vector3.Cross(dirVec, _normals[0]);
 
-        Vertices.Add((firstNode - middleNode) + perpen * 2f);
-        Vertices.Add((firstNode - middleNode) + perpen * -2f);
+        Vertices.Add(firstNode - middleNode + perpen * 2f);
+        Vertices.Add(firstNode - middleNode + perpen * -2f);
 
         normals.Add(_normals[0]);
         normals.Add(_normals[0]);
@@ -289,22 +258,22 @@ public struct RoadSegments
         uvs.Add(new Vector2(0, 0));
         uvs.Add(new Vector2(1, 0));
 
-        bool alternateForUVs = false;
-        for (int i = 0; i < nodes.Count - 1; i++)
+        var alternateForUVs = false;
+        for (var i = 0; i < nodes.Count - 1; i++)
         {
             firstNode = nodes[i];
             secondNode = nodes[i + 1];
 
-            middleNode = (nodes[i + 1] - nodes[i])/2;
+            middleNode = (nodes[i + 1] - nodes[i]) / 2;
 
             dirVec = middleNode.normalized;
 
             perpen = Vector3.Cross(dirVec, _normals[i]);
 
-            Vertices.Add((firstNode + middleNode) + perpen * 2f);
-            Vertices.Add((firstNode + middleNode) + perpen * -2f);
+            Vertices.Add(firstNode + middleNode + perpen * 2f);
+            Vertices.Add(firstNode + middleNode + perpen * -2f);
 
-            normals.Add((_normals[i] + _normals[i+1])/2);
+            normals.Add((_normals[i] + _normals[i + 1]) / 2);
             normals.Add((_normals[i] + _normals[i + 1]) / 2);
 
             if (alternateForUVs)
@@ -321,7 +290,7 @@ public struct RoadSegments
             }
         }
 
-        for (int i = 0; i < Vertices.Count - 3; i++)
+        for (var i = 0; i < Vertices.Count - 3; i++)
         {
             triangles.Add(i);
             triangles.Add(i + 1);
@@ -336,12 +305,12 @@ public struct RoadSegments
     public void addSegment(Vector3 newNode, Vector3 normal)
     {
         nodes.Add(newNode);
-        
-        Vector3 firstNode = nodes[nodes.Count - 2];
-        Vector3 middleNode = (newNode - nodes[nodes.Count - 2]) / 2;
 
-        Vertices.Add((firstNode + middleNode) + new Vector3(0, 0, 0.5f));
-        Vertices.Add((firstNode + middleNode) + new Vector3(0, 0, -0.5f));
+        var firstNode = nodes[nodes.Count - 2];
+        var middleNode = (newNode - nodes[nodes.Count - 2]) / 2;
+
+        Vertices.Add(firstNode + middleNode + new Vector3(0, 0, 0.5f));
+        Vertices.Add(firstNode + middleNode + new Vector3(0, 0, -0.5f));
 
         triangles.Add(Vertices.Count - 4);
         triangles.Add(Vertices.Count - 3);
@@ -360,68 +329,69 @@ public struct RoadSegments
         return nodes.Count - 1;
     }
 }
-    
+
 public class Road : MonoBehaviour
 {
-    private int gridSize;
-    private Vector2Int startingPosition;
     private Vector2Int endingPosition;
+    private readonly GridBounds gridBounds;
+    private readonly int gridSize;
+    private readonly int innerRadius;
+    private readonly MeshCollider MyMeshCollider;
     public RoadNode[] nodes;
-    private int innerRadius;
-    private int outerRadius;
-    private MeshCollider MyMeshCollider;
-    private GridBounds gridBounds;
-    private Vector2 offset;
-    private int stepLength;
+    private readonly Vector2 offset;
+    private readonly int outerRadius;
+    private Vector2Int startingPosition;
+    private readonly int stepLength;
 
-    public Road(Vector2Int start, Vector2Int end, int _bounds, int _innerRadius, int _outerRadius, int _stepLength, Vector2 _offset)
+    public Road(Vector2Int start, Vector2Int end, int _bounds, int _innerRadius, int _outerRadius, int _stepLength,
+        Vector2 _offset)
     {
-        gridSize = _bounds/_stepLength;
+        gridSize = _bounds / _stepLength;
         stepLength = _stepLength;
         offset.x = _bounds / 2 - _offset.x;
         offset.y = _bounds / 2 - _offset.y;
-        nodes = new RoadNode[gridSize*gridSize];
+        nodes = new RoadNode[gridSize * gridSize];
         startingPosition = start;
         endingPosition = end;
         innerRadius = _innerRadius;
         outerRadius = _outerRadius;
         MyMeshCollider = GameObject.Find("Mesh").GetComponent<MeshCollider>();
-        int gridExpansion = Math.Max(1, 100 / stepLength);
-        int lowerX = Math.Max(0,Math.Min(startingPosition.x, endingPosition.x)- gridExpansion);
-        int upperX = Math.Min(gridSize-1, Math.Max(startingPosition.x, endingPosition.x) + gridExpansion);
-        int lowerZ = Math.Max(0, Math.Min(startingPosition.y, endingPosition.y) - gridExpansion);
-        int upperZ = Math.Min(gridSize - 1, Math.Max(startingPosition.y, endingPosition.y) + gridExpansion);
+        var gridExpansion = Math.Max(1, 100 / stepLength);
+        var lowerX = Math.Max(0, Math.Min(startingPosition.x, endingPosition.x) - gridExpansion);
+        var upperX = Math.Min(gridSize - 1, Math.Max(startingPosition.x, endingPosition.x) + gridExpansion);
+        var lowerZ = Math.Max(0, Math.Min(startingPosition.y, endingPosition.y) - gridExpansion);
+        var upperZ = Math.Min(gridSize - 1, Math.Max(startingPosition.y, endingPosition.y) + gridExpansion);
         gridBounds = new GridBounds(lowerX, upperX, lowerZ, upperZ);
 
-        if (startingPosition.x < lowerX || startingPosition.x > upperX || startingPosition.y < lowerZ || startingPosition.y > upperZ)
+        if (startingPosition.x < lowerX || startingPosition.x > upperX || startingPosition.y < lowerZ ||
+            startingPosition.y > upperZ)
         {
-            Debug.Log("The starting position with " + startingPosition.x + " and " + startingPosition.y + " is not in the grid");
+            Debug.Log("The starting position with " + startingPosition.x + " and " + startingPosition.y +
+                      " is not in the grid");
             Debug.Log("The grid has the dimensions " + lowerX + " to " + upperX + " and " + lowerZ + " to " + upperZ);
             throw new Exception("Starting position is not in bounds");
         }
-        if (endingPosition.x < lowerX || endingPosition.x > upperX || endingPosition.y < lowerZ || endingPosition.y > upperZ)
-        {
-            throw new Exception("Ending position is not in bounds");
-        }
 
-        for (int z = 0; z < gridSize; ++z)
+        if (endingPosition.x < lowerX || endingPosition.x > upperX || endingPosition.y < lowerZ ||
+            endingPosition.y > upperZ) throw new Exception("Ending position is not in bounds");
+
+        for (var z = 0; z < gridSize; ++z)
+        for (var x = 0; x < gridSize; ++x)
         {
-            for (int x = 0; x < gridSize; ++x)
+            var index = z * gridSize + x;
+            if (z < gridBounds.lowerZ || z > gridBounds.upperZ || x < gridBounds.lowerX || x > gridBounds.upperX)
             {
-                int index = z * gridSize + x;
-                if (z < gridBounds.lowerZ || z > gridBounds.upperZ || x < gridBounds.lowerX || x > gridBounds.upperX)
-                {
-                    nodes[index].isValid = false;
-                }
-                else
-                {
-                    nodes[index].isValid = true;
-                    nodes[index] = new RoadNode(index);
-                    nodes[index].pos = new Vector3((x*stepLength) - offset.x, 0.0f, (z*stepLength) - offset.y);
-                    (nodes[index].mapHeight, nodes[index].normal) = RaycastAtPosition(new Vector2((x * stepLength) - offset.x, (z * stepLength) - offset.y));
-                    nodes[index].idx = index;
-                    nodes[index].predIdx = -1;
-                }
+                nodes[index].isValid = false;
+            }
+            else
+            {
+                nodes[index].isValid = true;
+                nodes[index] = new RoadNode(index);
+                nodes[index].pos = new Vector3(x * stepLength - offset.x, 0.0f, z * stepLength - offset.y);
+                (nodes[index].mapHeight, nodes[index].normal) =
+                    RaycastAtPosition(new Vector2(x * stepLength - offset.x, z * stepLength - offset.y));
+                nodes[index].idx = index;
+                nodes[index].predIdx = -1;
             }
         }
     }
@@ -436,100 +406,88 @@ public class Road : MonoBehaviour
         if (!MyMeshCollider.Raycast(ray, out var hit, maxHeight)) return (height, normal);
         height = hit.point.y;
         normal = hit.normal;
-        
+
         return (height, normal);
     }
-    
+
     public void generateRoad(Vector2Int start, Vector2Int end)
     {
         // We are going to use an A*-Algorithm to calculate the shortest path
         startingPosition = start;
         endingPosition = end;
-        int index = 0;
-        
+        var index = 0;
+
         // for the heuristic we are just going to calculate the square 3D distance from the end point to every point
-        for (int z_val = 0; z_val < gridSize; ++z_val)
+        for (var z_val = 0; z_val < gridSize; ++z_val)
+        for (var x_val = 0; x_val < gridSize; ++x_val)
         {
-            for (int x_val = 0; x_val < gridSize; ++x_val)
-            {
-                index = z_val * gridSize + x_val;
-                if (!nodes[index].isValid)
-                {
-                    continue;
-                }
-                Vector3 dists = nodes[index].pos - nodes[endingPosition.y*gridSize+endingPosition.x].pos;
-                nodes[index].heuristic = dists.x * dists.x + dists.z*dists.z;
-            }
+            index = z_val * gridSize + x_val;
+            if (!nodes[index].isValid) continue;
+            var dists = nodes[index].pos - nodes[endingPosition.y * gridSize + endingPosition.x].pos;
+            nodes[index].heuristic = dists.x * dists.x + dists.z * dists.z;
         }
 
         // FIXME: This can be way smaller or even dynamic
-        NodeHeap notVisited = new NodeHeap(gridSize*gridSize);
-        bool[] visited = new bool[gridSize * gridSize];
+        var notVisited = new NodeHeap(gridSize * gridSize);
+        var visited = new bool[gridSize * gridSize];
 
         // we are going to start at the starting point
-        notVisited.push(startingPosition.y*gridSize+startingPosition.x, 0f);
+        notVisited.push(startingPosition.y * gridSize + startingPosition.x, 0f);
         nodes[startingPosition.y * gridSize + startingPosition.x].dist = 0.0f;
 
         // Initializing variables for the loop to save memory
         int oldIndex;
-        int count = 0;
+        var count = 0;
         int x;
         int z;
         Vector3 relativeDist;
         float relativeHeight;
         float roadDist;
         float tunnelDist;
-        
+
         while (notVisited.lastIndex > 0 && !visited[endingPosition.y * gridSize + endingPosition.x])
         {
             oldIndex = notVisited.pop();
-            if (!nodes[oldIndex].isValid)
+            if (!nodes[oldIndex].isValid) continue;
+            for (var i = -outerRadius; i <= outerRadius; ++i)
+            for (var j = -outerRadius; j <= outerRadius; ++j)
             {
-                continue;
-            }
-            for (int i = -outerRadius; i <= outerRadius; ++i)
-            {
-                for (int j = -outerRadius; j <= outerRadius; ++j)
+                x = oldIndex % gridSize + i;
+                z = oldIndex / gridSize + j;
+                if (x < 0 || x >= gridSize || z < 0 || z >= gridSize) continue;
+                index = z * gridSize + x;
+                if (visited[index]) continue;
+                //if (oldIndex == index) continue;
+                if (Math.Abs(i) <= innerRadius && Math.Abs(j) <= innerRadius) continue;
+                relativeDist = nodes[index].pos - nodes[oldIndex].pos;
+                relativeHeight = nodes[index].mapHeight - nodes[oldIndex].mapHeight;
+                var direction = new Vector3(relativeDist.x, relativeHeight, relativeDist.z).normalized;
+                roadDist = nodes[oldIndex].dist + evalSlope(direction) * relativeDist.sqrMagnitude;
+                tunnelDist = nodes[oldIndex].dist + evalTunnel(relativeHeight) * relativeDist.sqrMagnitude;
+                if (roadDist < nodes[index].dist && roadDist < tunnelDist)
                 {
-                    x = oldIndex % gridSize + i;
-                    z = oldIndex / gridSize + j;
-                    if (x < 0 || x >= gridSize || z < 0 || z >= gridSize) continue;
-                    index = z * gridSize + x;
-                    if (visited[index]) continue;
-                    //if (oldIndex == index) continue;
-                    if (Math.Abs(i) <= innerRadius && Math.Abs(j) <= innerRadius) continue;
-                    relativeDist = nodes[index].pos - nodes[oldIndex].pos;
-                    relativeHeight = nodes[index].mapHeight - nodes[oldIndex].mapHeight;
-                    Vector3 direction = new Vector3(relativeDist.x, relativeHeight, relativeDist.z).normalized;
-                    roadDist = nodes[oldIndex].dist + evalSlope(direction)*relativeDist.sqrMagnitude;
-                    tunnelDist = nodes[oldIndex].dist + evalTunnel(relativeHeight) * relativeDist.sqrMagnitude;
-                    if (roadDist < nodes[index].dist && roadDist < tunnelDist)
+                    nodes[index].dist = roadDist;
+                    nodes[index].predIdx = oldIndex;
+                    notVisited.push(index, roadDist);
+                    nodes[index].roadType = RoadNodeType.Road;
+                }
+                else
+                {
+                    if (tunnelDist < nodes[index].dist)
                     {
-                        nodes[index].dist = roadDist;
+                        nodes[index].dist = tunnelDist;
                         nodes[index].predIdx = oldIndex;
-                        notVisited.push(index, roadDist);
-                        nodes[index].roadType = RoadNodeType.Road;
-                    }
-                    else
-                    {
-                        if (tunnelDist < nodes[index].dist)
-                        {
-                            nodes[index].dist = tunnelDist;
-                            nodes[index].predIdx = oldIndex;
-                            notVisited.push(index, tunnelDist);
-                            nodes[index].roadType = RoadNodeType.Tunnel;
-                        }
+                        notVisited.push(index, tunnelDist);
+                        nodes[index].roadType = RoadNodeType.Tunnel;
                     }
                 }
             }
+
             visited[oldIndex] = true;
             count++;
         }
 
-        if (nodes[endingPosition.y * gridSize + endingPosition.x].predIdx == -1)
-        {
-            throw new Exception("No path found");
-        }
+        if (nodes[endingPosition.y * gridSize + endingPosition.x].predIdx == -1) throw new Exception("No path found");
     }
 
     private float evalSlope(Vector3 dirVec)
@@ -538,14 +496,9 @@ public class Road : MonoBehaviour
         dirVec.Normalize();
 
         // If the slope is above 30 degrees we do not want a path going up there (or down there)
-        if(dirVec.y > 0.5f)
-        {
+        if (dirVec.y > 0.5f)
             return float.PositiveInfinity;
-        }
-        else
-        {   
-            return 1+ dirVec.y*10;
-        }
+        return 1 + dirVec.y * 10;
     }
 
     private float evalTunnel(float height)

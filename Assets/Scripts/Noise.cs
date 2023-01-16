@@ -1,4 +1,3 @@
-using UnityEditor.PackageManager.UI;
 using UnityEngine;
 using Random = System.Random;
 
@@ -8,8 +7,12 @@ using Random = System.Random;
 /// </summary>
 public static class Noise
 {
+    public enum NormalizeMode
+    {
+        Local,
+        Global
+    }
 
-    public enum NormalizeMode { Local, Global };
     /// <summary>
     ///     Generates a noise map using perlin noise
     /// </summary>
@@ -23,7 +26,8 @@ public static class Noise
     /// <param name="offset"> An extra offset applied by the user</param>
     /// <returns> A noise map using perlin noise</returns>
     public static float[,] GenerateNoiseMap(int mapWidth, int mapHeight, int seed, float scale, int octaves,
-        float persistance, float lacunartiy, Vector2 offset, bool addSystemTimeToSeed, float warpingStrenght, NormalizeMode normalizeMode)
+        float persistance, float lacunartiy, Vector2 offset, bool addSystemTimeToSeed, float warpingStrenght,
+        NormalizeMode normalizeMode)
     {
         var noiseMap = new float[mapWidth, mapHeight];
 
@@ -61,58 +65,63 @@ public static class Noise
 
         // Loop over every vertex
         for (var y = 0; y < mapHeight; ++y)
+        for (var x = 0; x < mapWidth; ++x)
         {
-            for (var x = 0; x < mapWidth; ++x)
+            // infuences the largest value possible
+            amplitude = 1;
+            // influnces the variance of the samples
+            frequency = 1;
+            float noiseHeight = 0;
+
+            // domain warping
+            for (var i = 0; i < octaves; ++i)
             {
-                // infuences the largest value possible
-                amplitude = 1;
-                // influnces the variance of the samples
-                frequency = 1;
-                float noiseHeight = 0;
+                var sampleX = (x - halfWidth + octaveOffsets[i].x) / scale * frequency;
+                var sampleY = (y - halfHeight + octaveOffsets[i].y) / scale * frequency;
 
-                // domain warping
-                for (var i = 0; i < octaves; ++i)
+                var q = new float[2]
                 {
-                    var sampleX = (x - halfWidth + octaveOffsets[i].x) / scale * frequency;
-                    var sampleY = (y - halfHeight + octaveOffsets[i].y) / scale * frequency;
+                    Mathf.PerlinNoise(sampleX, sampleY) * 2 - 1,
+                    Mathf.PerlinNoise(sampleX + 5.2f, sampleY + 1.3f) * 2 - 1
+                };
 
-                    float[] q = new float[2] { Mathf.PerlinNoise(sampleX, sampleY) * 2 - 1, Mathf.PerlinNoise(sampleX + 5.2f, sampleY + 1.3f) * 2 - 1 };
+                var r = new float[2]
+                {
+                    Mathf.PerlinNoise(sampleX + warpingStrenght * q[0] + 1.7f,
+                        sampleY + warpingStrenght * q[0] + 9.2f) * 2 - 1,
+                    Mathf.PerlinNoise(sampleX + warpingStrenght * q[0] + 8.3f,
+                        sampleX + warpingStrenght * q[0] + 2.8f) * 2 - 1
+                };
 
-                    float[] r = new float[2] {Mathf.PerlinNoise(sampleX + warpingStrenght * q[0] + 1.7f, sampleY + warpingStrenght * q[0] + 9.2f) * 2 - 1,
-                                              Mathf.PerlinNoise(sampleX + warpingStrenght * q[0] + 8.3f, sampleX + warpingStrenght * q[0] + 2.8f) * 2 - 1};
+                noiseHeight +=
+                    (Mathf.PerlinNoise(sampleX + warpingStrenght * r[0], sampleY + warpingStrenght * r[1]) * 2 - 1) *
+                    amplitude;
 
-                    noiseHeight += (Mathf.PerlinNoise(sampleX + warpingStrenght * r[0], sampleY + warpingStrenght * r[1]) * 2 - 1) * amplitude;
+                amplitude *= persistance;
 
-                    amplitude *= persistance;
-
-                    frequency *= lacunartiy;
-                }
-
-                // Getting the max and min noise height for normalization later on
-                if (noiseHeight > maxLocalNoiseHeight)
-                    maxLocalNoiseHeight = noiseHeight;
-                else if (noiseHeight < minLocalNoiseHeight)
-                    minLocalNoiseHeight = noiseHeight;
-                noiseMap[x, y] = noiseHeight;
+                frequency *= lacunartiy;
             }
+
+            // Getting the max and min noise height for normalization later on
+            if (noiseHeight > maxLocalNoiseHeight)
+                maxLocalNoiseHeight = noiseHeight;
+            else if (noiseHeight < minLocalNoiseHeight)
+                minLocalNoiseHeight = noiseHeight;
+            noiseMap[x, y] = noiseHeight;
         }
 
         // normilization 
         for (var y = 0; y < mapHeight; ++y)
-        {
-            for (var x = 0; x < mapWidth; ++x)
+        for (var x = 0; x < mapWidth; ++x)
+            if (normalizeMode == NormalizeMode.Local)
             {
-                if (normalizeMode == NormalizeMode.Local)
-                {
-                    noiseMap[x, y] = Mathf.InverseLerp(minLocalNoiseHeight, maxLocalNoiseHeight, noiseMap[x, y]);
-                }
-                else
-                {
-                    float normalizedHeight = (noiseMap[x, y] + 1) / (maxPossibleHeight / 0.9f);
-                    noiseMap[x, y] = Mathf.Clamp(normalizedHeight, 0, int.MaxValue);
-                }
+                noiseMap[x, y] = Mathf.InverseLerp(minLocalNoiseHeight, maxLocalNoiseHeight, noiseMap[x, y]);
             }
-        }
+            else
+            {
+                var normalizedHeight = (noiseMap[x, y] + 1) / (maxPossibleHeight / 0.9f);
+                noiseMap[x, y] = Mathf.Clamp(normalizedHeight, 0, int.MaxValue);
+            }
 
         return noiseMap;
     }
