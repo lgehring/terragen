@@ -59,7 +59,8 @@ namespace Ecosystem
         public int[] slopeConstraints;
         public string modelPath;
 
-        public PlantData(string type, int sizeRadius, int collisionRadius, int seedingRadius, int seedCount, int maxAge, int[] heightConstraints,
+        public PlantData(string type, int sizeRadius, int collisionRadius, int seedingRadius, int seedCount, int maxAge,
+            int[] heightConstraints,
             int[] slopeConstraints, string modelPath)
         {
             this.type = type;

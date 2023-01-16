@@ -21,10 +21,10 @@ public class EndlessTerrain : MonoBehaviour
 
     public Transform viewer;
     public Material mapMaterial;
-    private int chunkSize;
-    private int chunksVisibleInViewDst;
 
     private readonly Dictionary<Vector2, TerrainChunk> terrainChunkDictionary = new();
+    private int chunkSize;
+    private int chunksVisibleInViewDst;
     private Vector2 viewerPositionOld;
 
     private void Start()
@@ -73,19 +73,18 @@ public class EndlessTerrain : MonoBehaviour
 
     public class TerrainChunk
     {
-        private Bounds bounds;
-
         private readonly LODInfo[] detailLevels;
         private readonly LODMesh[] lodMeshes;
-
-        private MapData mapData;
-        private bool mapDataReceived;
         private readonly MeshFilter meshFilter;
 
         private readonly GameObject meshObject;
 
         private readonly MeshRenderer meshRenderer;
         private readonly Vector2 position;
+        private Bounds bounds;
+
+        private MapData mapData;
+        private bool mapDataReceived;
         private int previousLODIndex = -1;
 
         public TerrainChunk(Vector2 coord, int size, LODInfo[] detailLevels, Transform parent, Material material)
@@ -177,12 +176,12 @@ public class EndlessTerrain : MonoBehaviour
 
     private class LODMesh
     {
+        private readonly int lod;
+        private readonly Action updateCallback;
         public bool hasMesh;
         public bool hasRequestedMesh;
-        private readonly int lod;
 
         public Mesh mesh;
-        private readonly Action updateCallback;
 
         public LODMesh(int lod, Action updateCallback)
         {

@@ -22,7 +22,7 @@ namespace Ecosystem
         public double time;
         public bool renderPlants;
         public int count;
-        private PlantPool _plantPool;
+        public PlantPool plantPool;
         private Plant[,] _plantsMatrix;
         private MeshCollider _terrainCollider;
 
@@ -30,7 +30,7 @@ namespace Ecosystem
         private void Awake()
         {
             // Get the plantPool and terrain collider
-            _plantPool = GetComponent<PlantPool>();
+            plantPool = GetComponent<PlantPool>();
             _terrainCollider = GameObject.Find("Mesh").GetComponent<MeshCollider>();
 
             // Redefine bounds
@@ -57,18 +57,20 @@ namespace Ecosystem
                 if (_plantsMatrix[i, j] == null) continue;
 
                 // Remove collisions
-                var collisionPositions = GetCollisionsInRadius(new[] { i, j }, _plantsMatrix[i, j].data.collisionRadius);
+                var collisionPositions =
+                    GetCollisionsInRadius(new[] { i, j }, _plantsMatrix[i, j].data.collisionRadius);
                 foreach (var collisionPosition in collisionPositions)
                 {
-                    var winsFight = _plantsMatrix[i, j].Fight(_plantsMatrix[collisionPosition[0], collisionPosition[1]]);
+                    var winsFight = _plantsMatrix[i, j]
+                        .Fight(_plantsMatrix[collisionPosition[0], collisionPosition[1]]);
                     if (winsFight)
                     {
-                        _plantPool.ReturnPlant(_plantsMatrix[collisionPosition[0], collisionPosition[1]]);
+                        plantPool.ReturnPlant(_plantsMatrix[collisionPosition[0], collisionPosition[1]]);
                         _plantsMatrix[collisionPosition[0], collisionPosition[1]] = null;
                     }
                     else
                     {
-                        _plantPool.ReturnPlant(_plantsMatrix[i, j]);
+                        plantPool.ReturnPlant(_plantsMatrix[i, j]);
                         _plantsMatrix[i, j] = null;
                         break;
                     }
@@ -84,7 +86,7 @@ namespace Ecosystem
                 newSeedTypes.AddRange(Enumerable.Repeat(_plantsMatrix[i, j].data.type, newPos.Count()));
                 // Grow plant, remove old plants
                 if (!_plantsMatrix[i, j].Grow()) continue;
-                _plantPool.ReturnPlant(_plantsMatrix[i, j]);
+                plantPool.ReturnPlant(_plantsMatrix[i, j]);
                 _plantsMatrix[i, j] = null;
             }
 
@@ -125,7 +127,7 @@ namespace Ecosystem
 
             // Instantiate plant
             var newPos = new Vector3(worldPos.x, raycastResult.height, worldPos.y);
-            var newPlant = _plantPool.GetPlant(type, newPos, renderPlants);
+            var newPlant = plantPool.GetPlant(type, newPos, renderPlants);
             _plantsMatrix[pos.x, pos.y] = newPlant;
         }
 
@@ -173,7 +175,7 @@ namespace Ecosystem
             for (var j = 0; j < _plantsMatrix.GetLength(1); j++)
                 if (_plantsMatrix[i, j] != null)
                     count++;
-            if (count > _plantPool.initialPoolSize * 0.75f)
+            if (count > plantPool.initialPoolSize * 0.75f)
                 Debug.LogWarning(
                     "Plant count is greater than 75% of the initial pool size. Consider increasing initial pool size.");
         }
@@ -222,7 +224,7 @@ namespace Ecosystem
 
         public void CreatePlantPool()
         {
-            _plantPool.CreatePlantPool();
+            plantPool.CreatePlantPool();
         }
 
         public void UpdatePlantPrefabFiles()
@@ -232,7 +234,7 @@ namespace Ecosystem
             var plantPrefabs = Directory.GetFiles(plantPrefabsPath);
             foreach (var plantPrefab in plantPrefabs)
                 File.Delete(plantPrefab);
-            
+
             // Create new plant prefab files
             foreach (var type in PlantData.Data.Keys)
             {
@@ -248,7 +250,7 @@ namespace Ecosystem
                 DestroyImmediate(prefab);
             }
         }
-        
+
         // A function that translates a position in the world to a position in the plant matrix
         private Vector2Int WorldToMatrix(Vector2 worldPos)
         {

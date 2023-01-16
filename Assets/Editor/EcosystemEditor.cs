@@ -16,7 +16,7 @@ namespace Editor
 
             // Show info
             EditorGUILayout.LabelField("Ecosystem", EditorStyles.boldLabel);
-            // Non-null martrix entries
+            // Non-null matrix entries
             EditorGUILayout.LabelField("Number of plants", ecosystem.count.ToString(CultureInfo.InvariantCulture));
             EditorGUILayout.LabelField("Time", ecosystem.time.ToString(CultureInfo.InvariantCulture));
             EditorGUILayout.LabelField("Bounds", ecosystem.bounds.ToString());
@@ -32,6 +32,8 @@ namespace Editor
             if (GUILayout.Button("Advance")) ecosystem.EvolveEcosystem();
 
             if (GUILayout.Button("UpdatePlantPrefabs")) ecosystem.UpdatePlantPrefabFiles();
+            
+            // if (GUILayout.Button("Combine Active Plants")) ecosystem.plantPool.CombineActivePlants();
         }
     }
 }
