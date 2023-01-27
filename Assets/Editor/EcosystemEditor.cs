@@ -31,9 +31,9 @@ namespace Editor
 
             if (GUILayout.Button("Advance")) ecosystem.EvolveEcosystem();
 
-            if (GUILayout.Button("UpdatePlantPrefabs")) ecosystem.UpdatePlantPrefabFiles();
-            
-            // if (GUILayout.Button("Combine Active Plants")) ecosystem.plantPool.CombineActivePlants();
+            if (GUILayout.Button("Advance 5"))
+                for (var i = 0; i < 10; i++)
+                    ecosystem.EvolveEcosystem();
         }
     }
 }

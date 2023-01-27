@@ -2,7 +2,6 @@
 using System.Linq;
 using UnityEditor;
 using UnityEngine;
-using UnityEngine.Rendering;
 
 namespace Ecosystem
 {
@@ -23,7 +22,6 @@ namespace Ecosystem
             _plantsParent = GameObject.Find("Plants");
             // Create the initial pool of plants
             var numTypes = PlantTypes.Count;
-            var numPerType = initialPoolSize / numTypes;
             _plantPrefabs = new GameObject[numTypes];
             for (var typeIndex = 0; typeIndex < numTypes; typeIndex++)
             {
@@ -39,11 +37,20 @@ namespace Ecosystem
                 _plantPrefabs[typeIndex] = typePrefab;
                 // Populate the pool
                 _availablePlants[typeIndex] = new Stack<Plant>();
-                for (var j = 0; j < numPerType; j++)
+                var numPlants = initialPoolSize;
+                if (typeInfo.type.Contains("grass"))
+                    numPlants = initialPoolSize * 100; // Grass is very common
+                for (var j = 0; j < numPlants; j++)
                 {
                     var newPlantGo = Instantiate(_plantPrefabs[typeIndex], _plantsParent.transform, true);
+                    // Give each plant a random rotation
+                    newPlantGo.transform.Rotate(0, Random.Range(0, 360), 0);
                     newPlantGo.isStatic = true;
                     var plant = newPlantGo.GetComponent<Plant>();
+                    // Give each plant a slightly different max scale
+                    plant.fullScale = Random.Range(0.8f, 1.2f) * scale;
+                    // Give each plant a slightly different max age
+                    plant.maxAge = Random.Range(0.8f, 1.2f) * typeInfo.maxAge;
                     plant.gameObject.SetActive(false);
                     _availablePlants[typeIndex].Push(plant);
                 }
@@ -60,9 +67,23 @@ namespace Ecosystem
             }
             else
             {
+                Debug.LogWarning("Creating new plant of type " + type);
                 var newPlantGo = Instantiate(_plantPrefabs[typeIndex], _plantsParent.transform, true);
+                var typeInfo = PlantData.Get(PlantTypes[typeIndex]);
+                // Give each plant a random rotation
+                newPlantGo.transform.Rotate(0, Random.Range(0, 360), 0);
                 newPlantGo.isStatic = true;
                 plant = newPlantGo.GetComponent<Plant>();
+                // Rescale the plant prefab to the correct size
+                var typePrefab =
+                    AssetDatabase.LoadAssetAtPath<GameObject>("Assets/PlantPrefabs/" + typeInfo.type + ".prefab");
+                var bounds = typePrefab.GetComponent<MeshFilter>().sharedMesh.bounds;
+                var maxExtent = Mathf.Max(bounds.size.x, bounds.size.z);
+                var scale = typeInfo.sizeRadius / maxExtent;
+                // Give each plant a slightly different max scale
+                plant.fullScale = Random.Range(0.8f, 1.2f) * scale;
+                // Give each plant a slightly different max age
+                plant.maxAge = Random.Range(0.8f, 1.2f) * typeInfo.maxAge;
             }
 
             plant.gameObject.SetActive(render);
@@ -77,41 +98,6 @@ namespace Ecosystem
             plant.Reset();
             plant.gameObject.SetActive(false);
             _availablePlants[typeIndex].Push(plant);
-        }
-
-        public void CombineActivePlants() //TODO: make this work?
-        {
-            var meshFilters = _plantsParent.GetComponentsInChildren<MeshFilter>();
-            var combine = new List<CombineInstance>();
-            var plantParentMeshFilter = _plantsParent.transform.GetComponent<MeshFilter>();
-
-            foreach (var t in meshFilters)
-            {
-                if (t.sharedMesh == null) continue;
-                combine.Add(new CombineInstance
-                {
-                    mesh = t.sharedMesh,
-                    transform = t.transform.localToWorldMatrix
-                });
-                t.gameObject.SetActive(false);
-
-                if (combine.Count <= 0 || combine.Count * 3 < 65280) continue;
-                var plantParentMesh = plantParentMeshFilter.mesh = new Mesh();
-                plantParentMesh.name = "CombinedPlants";
-                plantParentMesh.indexFormat = IndexFormat.UInt32;
-                plantParentMesh.CombineMeshes(combine.ToArray());
-                _plantsParent.transform.gameObject.SetActive(true);
-                combine.Clear();
-            }
-
-            if (combine.Count <= 0) return;
-            {
-                var plantParentMesh = plantParentMeshFilter.mesh = new Mesh();
-                plantParentMesh.name = "CombinedPlants";
-                plantParentMesh.indexFormat = IndexFormat.UInt32;
-                plantParentMesh.CombineMeshes(combine.ToArray());
-                _plantsParent.transform.gameObject.SetActive(true);
-            }
         }
     }
 }

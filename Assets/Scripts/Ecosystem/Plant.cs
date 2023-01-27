@@ -8,6 +8,8 @@ namespace Ecosystem
         public PlantData data;
         public double age;
         public double viability;
+        public double fullScale;
+        public double maxAge;
 
         public void Reset()
         {
@@ -23,14 +25,14 @@ namespace Ecosystem
         public bool Grow(double deltaT = 0.5)
         {
             age += deltaT;
-            if (age > data.maxAge) return true;
+            if (age > maxAge) return true;
             UpdateViability();
             return false;
         }
 
         private void UpdateViability()
         {
-            var normalizedAge = age / data.maxAge;
+            var normalizedAge = age / maxAge;
             if (normalizedAge < 0.5)
                 viability = normalizedAge;
             else

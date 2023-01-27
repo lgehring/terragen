@@ -61,6 +61,10 @@ namespace Ecosystem
                     GetCollisionsInRadius(new[] { i, j }, _plantsMatrix[i, j].data.collisionRadius);
                 foreach (var collisionPosition in collisionPositions)
                 {
+                    // Allow grass to grow on in the vicinity of other plants (not itself)
+                    var isGrass = _plantsMatrix[collisionPosition[0], collisionPosition[1]].data.type.Contains("grass");
+                    if (isGrass && !_plantsMatrix[i, j].data.type.Contains("grass")) continue;
+
                     var winsFight = _plantsMatrix[i, j]
                         .Fight(_plantsMatrix[collisionPosition[0], collisionPosition[1]]);
                     if (winsFight)
@@ -85,9 +89,18 @@ namespace Ecosystem
                 newSeedPositions.AddRange(newPos);
                 newSeedTypes.AddRange(Enumerable.Repeat(_plantsMatrix[i, j].data.type, newPos.Count()));
                 // Grow plant, remove old plants
-                if (!_plantsMatrix[i, j].Grow()) continue;
-                plantPool.ReturnPlant(_plantsMatrix[i, j]);
-                _plantsMatrix[i, j] = null;
+                //TODO: Add environmental feedback
+                if (_plantsMatrix[i, j].Grow())
+                {
+                    // Plant dies
+                    plantPool.ReturnPlant(_plantsMatrix[i, j]);
+                    _plantsMatrix[i, j] = null;
+                }
+                else
+                {
+                    if (renderPlants)
+                        AgeScalePlant(_plantsMatrix[i, j]);
+                }
             }
 
             // Iterate over new seeds and instantiate them if valid
@@ -127,6 +140,8 @@ namespace Ecosystem
 
             // Instantiate plant
             var newPos = new Vector3(worldPos.x, raycastResult.height, worldPos.y);
+            // Randomly choose a type variation
+            // var subType = PlantData.GetVariation(type);
             var newPlant = plantPool.GetPlant(type, newPos, renderPlants);
             _plantsMatrix[pos.x, pos.y] = newPlant;
         }
@@ -175,9 +190,6 @@ namespace Ecosystem
             for (var j = 0; j < _plantsMatrix.GetLength(1); j++)
                 if (_plantsMatrix[i, j] != null)
                     count++;
-            if (count > plantPool.initialPoolSize * 0.75f)
-                Debug.LogWarning(
-                    "Plant count is greater than 75% of the initial pool size. Consider increasing initial pool size.");
         }
 
         private (float height, Vector3 normal) RaycastAtPosition(Vector2 position)
@@ -218,8 +230,20 @@ namespace Ecosystem
             for (var i = 0; i < _plantsMatrix.GetLength(0); i++)
             for (var j = 0; j < _plantsMatrix.GetLength(1); j++)
                 if (_plantsMatrix[i, j] != null)
+                {
+                    if (show) AgeScalePlant(_plantsMatrix[i, j]);
                     _plantsMatrix[i, j].gameObject.SetActive(show);
+                }
+
             renderPlants = show;
+        }
+
+        private static void AgeScalePlant(Plant plant)
+        {
+            var relAge = (float)(plant.age / plant.maxAge);
+            var plantFullScale = (float)plant.fullScale;
+            // Scale plant based on age up to 0.5 relAge (fullScale), then keep it at full scale
+            plant.transform.localScale = Vector3.one * Mathf.Lerp(0.1f, plantFullScale, relAge * 2);
         }
 
         public void CreatePlantPool()
