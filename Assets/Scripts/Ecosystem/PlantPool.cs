@@ -38,8 +38,8 @@ namespace Ecosystem
                 // Populate the pool
                 _availablePlants[typeIndex] = new Stack<Plant>();
                 var numPlants = initialPoolSize;
-                if (typeInfo.type.Contains("grass"))
-                    numPlants = initialPoolSize * 100; // Grass is very common
+                // if (typeInfo.type.Contains("grass"))
+                //     numPlants = initialPoolSize * 100; // Grass is very common
                 for (var j = 0; j < numPlants; j++)
                 {
                     var newPlantGo = Instantiate(_plantPrefabs[typeIndex], _plantsParent.transform, true);

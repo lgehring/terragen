@@ -48,8 +48,30 @@ namespace Ecosystem
         // Performs full single step of the ecosystem simulation
         public void EvolveEcosystem()
         {
+            const double deltaT = 0.5;
             var newSeedPositions = new List<Vector2Int>();
             var newSeedTypes = new List<string>();
+            var plantTypes = PlantData.Data.Keys.ToList();
+            var plantCounts = new int[plantTypes.Count];
+            
+            // Calculate per type area coverage
+            for (var i = 0; i < _plantsMatrix.GetLength(0); i++)
+            for (var j = 0; j < _plantsMatrix.GetLength(1); j++)
+            {
+                // Skip cell if plant does not exist
+                if (_plantsMatrix[i, j] == null) continue;
+                
+                // Add plant to plantCounts
+                plantCounts[plantTypes.IndexOf(_plantsMatrix[i, j].data.type)]++;
+            }
+            // Multiply each count by its types sizeRadius to get area coverage
+            var coverages = new double[plantTypes.Count];
+            for (var i = 0; i < plantCounts.Length; i++)
+                coverages[i] = plantCounts[i] * PlantData.Data[plantTypes[i]].sizeRadius;
+            // Calculate coverage fractions 
+            //TODO: manipulate this to get different ecosystems: higher values (-> 1) = better growth
+            var covFractions = GetOtherPlantsCovFractions(coverages);
+
             for (var i = 0; i < _plantsMatrix.GetLength(0); i++)
             for (var j = 0; j < _plantsMatrix.GetLength(1); j++)
             {
@@ -57,13 +79,12 @@ namespace Ecosystem
                 if (_plantsMatrix[i, j] == null) continue;
 
                 // Remove collisions
-                var collisionPositions =
-                    GetCollisionsInRadius(new[] { i, j }, _plantsMatrix[i, j].data.collisionRadius);
+                var collisionPositions = CheckArea(new[] { i, j }, _plantsMatrix[i, j].data.collisionRadius);
                 foreach (var collisionPosition in collisionPositions)
                 {
                     // Allow grass to grow on in the vicinity of other plants (not itself)
-                    var isGrass = _plantsMatrix[collisionPosition[0], collisionPosition[1]].data.type.Contains("grass");
-                    if (isGrass && !_plantsMatrix[i, j].data.type.Contains("grass")) continue;
+                    // var isGrass = _plantsMatrix[collisionPosition[0], collisionPosition[1]].data.type.Contains("grass");
+                    // if (isGrass && !_plantsMatrix[i, j].data.type.Contains("grass")) continue;
 
                     var winsFight = _plantsMatrix[i, j]
                         .Fight(_plantsMatrix[collisionPosition[0], collisionPosition[1]]);
@@ -89,17 +110,18 @@ namespace Ecosystem
                 newSeedPositions.AddRange(newPos);
                 newSeedTypes.AddRange(Enumerable.Repeat(_plantsMatrix[i, j].data.type, newPos.Count()));
                 // Grow plant, remove old plants
-                //TODO: Add environmental feedback
-                if (_plantsMatrix[i, j].Grow())
+                var typeIndex = plantTypes.IndexOf(_plantsMatrix[i, j].data.type);
+                if (!_plantsMatrix[i, j].Grow(covFractions[typeIndex]))
                 {
-                    // Plant dies
-                    plantPool.ReturnPlant(_plantsMatrix[i, j]);
-                    _plantsMatrix[i, j] = null;
+                    // Continues living
+                    if (renderPlants) 
+                        AgeScalePlant(_plantsMatrix[i, j]);
                 }
                 else
                 {
-                    if (renderPlants)
-                        AgeScalePlant(_plantsMatrix[i, j]);
+                    // Dies of old age
+                    plantPool.ReturnPlant(_plantsMatrix[i, j]);
+                    _plantsMatrix[i, j] = null;
                 }
             }
 
@@ -112,9 +134,20 @@ namespace Ecosystem
             }
 
             // Advance time, update number of existing plants
-            const double deltaT = 0.5;
             time += deltaT;
             UpdateCount();
+        }
+
+        private static double[] GetOtherPlantsCovFractions(IReadOnlyList<double> coverages)
+        {
+            // The otherPlantsCoverageFrac gives a_i/ a_n
+            // where a_i is the area of the plant and a_n is the area of all plants
+            var covFractions = new double[coverages.Count];
+            var totalCoverage = coverages.Sum();
+            for (var i = 0; i < coverages.Count; i++)
+                covFractions[i] = coverages[i] / totalCoverage;
+            
+            return covFractions;
         }
 
         private void PlacePlant(Vector2Int pos, string type)
@@ -141,15 +174,19 @@ namespace Ecosystem
             // Instantiate plant
             var newPos = new Vector3(worldPos.x, raycastResult.height, worldPos.y);
             // Randomly choose a type variation
-            // var subType = PlantData.GetVariation(type);
-            var newPlant = plantPool.GetPlant(type, newPos, renderPlants);
+            var subType = PlantData.GetVariation(type);
+            var newPlant = plantPool.GetPlant(subType, newPos, renderPlants);
+            if (renderPlants)
+            {
+                AgeScalePlant(newPlant);
+            }
             _plantsMatrix[pos.x, pos.y] = newPlant;
         }
 
-        private IEnumerable<int[]> GetCollisionsInRadius(IReadOnlyList<int> pos, int radius)
+        private IEnumerable<int[]> CheckArea(IReadOnlyList<int> pos, int radius)
         {
             var cells = new List<int[]>();
-            var radiusSquared = radius * radius;
+            var radiusSquared = radius * radius; // check for collisions only in direct neighborhood
             var lowerBoundX = Mathf.Max(0, pos[0] - radius);
             var upperBoundX = Mathf.Min(_plantsMatrix.GetLength(0) - 1, pos[0] + radius);
             var lowerBoundY = Mathf.Max(0, pos[1] - radius);
@@ -157,6 +194,7 @@ namespace Ecosystem
             for (var i = lowerBoundX; i <= upperBoundX; i++)
             for (var j = lowerBoundY; j <= upperBoundY; j++)
             {
+                // Check for collisions
                 if (i == pos[0] && j == pos[1]) continue;
                 if ((i - pos[0]) * (i - pos[0]) + (j - pos[1]) * (j - pos[1]) > radiusSquared) continue;
                 if (_plantsMatrix[i, j] == null) continue;
@@ -231,7 +269,11 @@ namespace Ecosystem
             for (var j = 0; j < _plantsMatrix.GetLength(1); j++)
                 if (_plantsMatrix[i, j] != null)
                 {
-                    if (show) AgeScalePlant(_plantsMatrix[i, j]);
+                    if (show)
+                    {
+                        AgeScalePlant(_plantsMatrix[i, j]);
+                    }
+
                     _plantsMatrix[i, j].gameObject.SetActive(show);
                 }
 

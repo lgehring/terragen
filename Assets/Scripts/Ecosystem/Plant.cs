@@ -22,21 +22,24 @@ namespace Ecosystem
             gameObject.transform.position = pos;
         }
 
-        public bool Grow(double deltaT = 0.5)
+        public bool Grow(double otherPlantsCoverageFrac, double deltaT = 0.5)
         {
             age += deltaT;
             if (age > maxAge) return true;
-            UpdateViability();
+            UpdateViability(otherPlantsCoverageFrac);
             return false;
         }
-
-        private void UpdateViability()
+        
+        private void UpdateViability(double otherPlantsCoverageFrac)
         {
             var normalizedAge = age / maxAge;
             if (normalizedAge < 0.5)
                 viability = normalizedAge;
             else
                 viability = 1 - normalizedAge;
+            
+            // Apply environmental feedback
+            viability *= otherPlantsCoverageFrac;
         }
 
         public bool Fight(Plant other)

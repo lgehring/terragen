@@ -8,11 +8,12 @@ namespace Ecosystem
     [Serializable]
     public class PlantData
     {
+        //TODO: add dead plants? with spawn chance at death?
         public static string[][] variations =
         {
             new[] { "tree_0", "tree_1", "tree_2" },
             new[] { "evergreen_0", "evergreen_1", "evergreen_2" },
-            new[] { "grass_0", "grass_1" },
+            // new[] { "grass_0", "grass_1" },
             new[] { "bush_0", "bush_1" }
         };
 
@@ -96,32 +97,32 @@ namespace Ecosystem
                     "Assets/BrokenVector/LowPolyTreePack/Prefabs/Tree Type2 05.prefab"
                 )
             },
-            {
-                "grass_0", new PlantData(
-                    "grass_0",
-                    3,
-                    3,
-                    50,
-                    4,
-                    3,
-                    new[] { 0, 768 }, // 75% of 1024
-                    new[] { 0, 100 },
-                    "Assets/polygonTrees/polygonTrees/prefabs/grass/grass Variant.prefab"
-                )
-            },
-            {
-                "grass_1", new PlantData(
-                    "grass_1",
-                    3,
-                    3,
-                    50,
-                    3,
-                    4,
-                    new[] { 0, 768 }, // 75% of 1024
-                    new[] { 0, 100 },
-                    "Assets/polygonTrees/polygonTrees/prefabs/grass/littleGrass Variant.prefab"
-                )
-            },
+            // {
+            //     "grass_0", new PlantData(
+            //         "grass_0",
+            //         3,
+            //         3,
+            //         50,
+            //         4,
+            //         3,
+            //         new[] { 0, 768 }, // 75% of 1024
+            //         new[] { 0, 100 },
+            //         "Assets/polygonTrees/polygonTrees/prefabs/grass/grass Variant.prefab"
+            //     )
+            // },
+            // {
+            //     "grass_1", new PlantData(
+            //         "grass_1",
+            //         3,
+            //         3,
+            //         50,
+            //         3,
+            //         4,
+            //         new[] { 0, 768 }, // 75% of 1024
+            //         new[] { 0, 100 },
+            //         "Assets/polygonTrees/polygonTrees/prefabs/grass/littleGrass Variant.prefab"
+            //     )
+            // },
             {
                 "bush_0", new PlantData(
                     "bush_0",
