@@ -18,6 +18,8 @@ public class MapGenerator : MonoBehaviour
 
     public static int mapChunkSize = 200;
 
+    public static string mapFolder = "Assets/Heightmaps/langenargen/";
+
     public DrawMode drawMode;
 
     public Noise.NormalizeMode normalizeMode;
@@ -132,7 +134,7 @@ public class MapGenerator : MonoBehaviour
         var noiseMap = Noise.GenerateNoiseMap(mapChunkSize, mapChunkSize, seed, noiseScale, octaves, persistance,
             lacunarity,
             centre + offset, addSystemTimeToSeed, warpingStrength, normalizeMode);
-        noiseMap = NoiseMapReader.ReadNoiseMap("Assets/Heightmaps/tuebingen.png", mapChunkSize);
+        noiseMap = NoiseMapReader.ReadNoiseMap(mapFolder + "heightmap.png", mapChunkSize, true);
 
         var colorMap = new Color[mapChunkSize * mapChunkSize];
         for (var y = 0; y < mapChunkSize; y++)

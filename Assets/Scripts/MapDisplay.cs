@@ -9,6 +9,7 @@ public class MapDisplay : MonoBehaviour
     // This is the mesh that we want to apply the texture to 
     public Renderer textureRender;
     public MeshFilter meshFilter;
+    public MeshCollider meshCollider;
     public MeshRenderer meshRenderer;
 
     /// <summary>
@@ -26,5 +27,6 @@ public class MapDisplay : MonoBehaviour
     {
         meshFilter.sharedMesh = meshData.CreateMesh();
         meshRenderer.sharedMaterial.mainTexture = texture;
+        meshCollider.sharedMesh = meshFilter.sharedMesh;
     }
 }

@@ -126,10 +126,10 @@ namespace Ecosystem
             {
                 "bush_0", new PlantData(
                     "bush_0",
-                    4,
-                    4,
                     8,
-                    3,
+                    6,
+                    8,
+                    2,
                     5,
                     new[] { 0, 1024 },
                     new[] { 0, 500 },
@@ -142,7 +142,7 @@ namespace Ecosystem
                     4,
                     4,
                     8,
-                    3,
+                    2,
                     5,
                     new[] { 0, 1024 },
                     new[] { 0, 500 },

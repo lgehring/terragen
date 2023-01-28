@@ -24,8 +24,8 @@ namespace Editor
             var showPlants = EditorGUILayout.Toggle("Show plants", ecosystem.renderPlants);
             ecosystem.ShowPlants(showPlants);
 
-            if (GUILayout.Button("Create Plant Pool (FREEZES EDITOR)"))
-                ecosystem.CreatePlantPool();
+            if (GUILayout.Button("Prepare Ecosystem (FREEZES EDITOR)"))
+                ecosystem.PrepareEcosystem();
 
             if (GUILayout.Button("InitSeeds")) ecosystem.InitSeeds();
 

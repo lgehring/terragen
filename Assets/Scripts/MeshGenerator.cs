@@ -22,15 +22,17 @@ public static class MeshGenerator
         for (var y = 0; y < height; y += meshSimplificationIncrement)
         for (var x = 0; x < width; x += meshSimplificationIncrement)
         {
-            meshData.vertices[vertexIndex] = new Vector3(topLeftX + x,
-                heightCurve.Evaluate(heightMap[y, x]) * heightMultiplier, topLeftZ - y);
-            meshData.uvs[vertexIndex] = new Vector2(x / (float)width, y / (float)height);
+            meshData.vertices[vertexIndex] = new Vector3(topLeftX + width - x - 1,
+                heightCurve.Evaluate(heightMap[y, x]) * heightMultiplier, topLeftZ + y);
+            meshData.uvs[vertexIndex] = new Vector2((width - x) / (float)width, (height - y) / (float)height);
+
 
             if (x < width - 1 && y < height - 1)
             {
-                meshData.AddTriangle(vertexIndex, vertexIndex + verticesPerLine + 1, vertexIndex + verticesPerLine);
-                meshData.AddTriangle(vertexIndex + verticesPerLine + 1, vertexIndex, vertexIndex + 1);
+                meshData.AddTriangle(vertexIndex, vertexIndex + 1, vertexIndex + verticesPerLine + 1);
+                meshData.AddTriangle(vertexIndex + verticesPerLine + 1, vertexIndex + verticesPerLine, vertexIndex);
             }
+
 
             vertexIndex++;
         }

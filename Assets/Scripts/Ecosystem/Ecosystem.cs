@@ -1,8 +1,10 @@
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using UnityEditor;
 using UnityEngine;
+using Random = UnityEngine.Random;
 
 namespace Ecosystem
 {
@@ -23,6 +25,7 @@ namespace Ecosystem
         public bool renderPlants;
         public int count;
         public PlantPool plantPool;
+        private int[,][] _plantBlockedZones; //TODO: make it possible to add entries from outside
         private Plant[,] _plantsMatrix;
         private MeshCollider _terrainCollider;
 
@@ -53,17 +56,18 @@ namespace Ecosystem
             var newSeedTypes = new List<string>();
             var plantTypes = PlantData.Data.Keys.ToList();
             var plantCounts = new int[plantTypes.Count];
-            
+
             // Calculate per type area coverage
             for (var i = 0; i < _plantsMatrix.GetLength(0); i++)
             for (var j = 0; j < _plantsMatrix.GetLength(1); j++)
             {
                 // Skip cell if plant does not exist
                 if (_plantsMatrix[i, j] == null) continue;
-                
+
                 // Add plant to plantCounts
                 plantCounts[plantTypes.IndexOf(_plantsMatrix[i, j].data.type)]++;
             }
+
             // Multiply each count by its types sizeRadius to get area coverage
             var coverages = new double[plantTypes.Count];
             for (var i = 0; i < plantCounts.Length; i++)
@@ -114,7 +118,7 @@ namespace Ecosystem
                 if (!_plantsMatrix[i, j].Grow(covFractions[typeIndex]))
                 {
                     // Continues living
-                    if (renderPlants) 
+                    if (renderPlants)
                         AgeScalePlant(_plantsMatrix[i, j]);
                 }
                 else
@@ -138,6 +142,52 @@ namespace Ecosystem
             UpdateCount();
         }
 
+        private int[,][] GetBlockedZones()
+        {
+            // Array of indices of blocked plants at the position in the matrix
+            var blockedZones = new int[(int)bounds.width, (int)bounds.height][];
+            var plantTypes = PlantData.Data.Keys.Append("all").ToList(); // also check for a complete block map
+            // Remove suffixes "_0", "_1", etc. and duplicates
+            var plantGroups = plantTypes.Select(type => type.Split('_')[0]).Distinct().ToList();
+
+            foreach (var group in plantGroups)
+            {
+                // Check if the path exists
+                var path = MapGenerator.mapFolder + "block_" + group + ".png";
+                if (!File.Exists(path)) continue;
+                // Get blocked map
+                var blockedMap = NoiseMapReader.ReadNoiseMap(path, MapGenerator.mapChunkSize, false);
+
+                // For every entry in the map that is 1.0f, add the plant type index to the blockedZones array
+                for (var i = 0; i < blockedMap.GetLength(0); i++)
+                for (var j = 0; j < blockedMap.GetLength(1); j++)
+                {
+                    if (!(Math.Abs(blockedMap[i, j] - 1.0f) < 0.1f)) continue;
+                    var plantGroupIndex = plantGroups.IndexOf(group);
+                    if (blockedZones[i, j] == null)
+                    {
+                        blockedZones[i, j] = new[] { plantGroupIndex };
+                    }
+                    else
+                    {
+                        var newBlockedZones = new int[blockedZones[i, j].Length + 1];
+                        blockedZones[i, j].CopyTo(newBlockedZones, 0);
+                        newBlockedZones[^1] = plantGroupIndex;
+                        blockedZones[i, j] = newBlockedZones;
+                    }
+
+                    // If current pos contains index plantTypes.Count, = all plants are blocked
+                    // replace it with a new array containing all indices
+                    if (!blockedZones[i, j].Contains(plantGroups.Count - 1)) continue;
+                    blockedZones[i, j] = new int[plantGroups.Count - 1];
+                    for (var k = 0; k < plantGroups.Count - 1; k++)
+                        blockedZones[i, j][k] = k;
+                }
+            }
+
+            return blockedZones;
+        }
+
         private static double[] GetOtherPlantsCovFractions(IReadOnlyList<double> coverages)
         {
             // The otherPlantsCoverageFrac gives a_i/ a_n
@@ -146,7 +196,7 @@ namespace Ecosystem
             var totalCoverage = coverages.Sum();
             for (var i = 0; i < coverages.Count; i++)
                 covFractions[i] = coverages[i] / totalCoverage;
-            
+
             return covFractions;
         }
 
@@ -158,6 +208,12 @@ namespace Ecosystem
 
             // Check if position is empty
             if (_plantsMatrix[pos.x, pos.y] != null) return;
+
+            // Check if position is blocked for type
+            var plantGroupIndex = Array.IndexOf(PlantData.variations,
+                PlantData.variations.FirstOrDefault(x => x.Contains(type)));
+            if (_plantBlockedZones[pos.x, pos.y] != null &&
+                _plantBlockedZones[pos.x, pos.y].Contains(plantGroupIndex)) return;
 
             // Check if position is valid for type
             var worldPos = MatrixToWorld(pos);
@@ -176,10 +232,7 @@ namespace Ecosystem
             // Randomly choose a type variation
             var subType = PlantData.GetVariation(type);
             var newPlant = plantPool.GetPlant(subType, newPos, renderPlants);
-            if (renderPlants)
-            {
-                AgeScalePlant(newPlant);
-            }
+            if (renderPlants) AgeScalePlant(newPlant);
             _plantsMatrix[pos.x, pos.y] = newPlant;
         }
 
@@ -269,10 +322,7 @@ namespace Ecosystem
             for (var j = 0; j < _plantsMatrix.GetLength(1); j++)
                 if (_plantsMatrix[i, j] != null)
                 {
-                    if (show)
-                    {
-                        AgeScalePlant(_plantsMatrix[i, j]);
-                    }
+                    if (show) AgeScalePlant(_plantsMatrix[i, j]);
 
                     _plantsMatrix[i, j].gameObject.SetActive(show);
                 }
@@ -288,8 +338,9 @@ namespace Ecosystem
             plant.transform.localScale = Vector3.one * Mathf.Lerp(0.1f, plantFullScale, relAge * 2);
         }
 
-        public void CreatePlantPool()
+        public void PrepareEcosystem()
         {
+            _plantBlockedZones = GetBlockedZones();
             plantPool.CreatePlantPool();
         }
 

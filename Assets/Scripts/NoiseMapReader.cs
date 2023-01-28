@@ -9,7 +9,7 @@ public static class NoiseMapReader
     // TODO: support heightscaling
     // A function that reads in a black and white image and returns a float array of the grayscale values
     // Image must have the size of the map (1km = 10px)
-    public static float[,] ReadNoiseMap(string path, int mapChunkSize)
+    public static float[,] ReadNoiseMap(string path, int mapChunkSize, bool terrain)
     {
         // Load the image
         var fileData = File.ReadAllBytes(path);
@@ -17,8 +17,22 @@ public static class NoiseMapReader
         texture.LoadImage(fileData);
         // Crop the image to the size of the map
         var croppedTexture = CropTextureCenter(texture, mapChunkSize);
+
+        //Flip the image horizontally and vertically
+        // Create a new Texture2D with the same dimensions as the original
+        var flippedTexture = new Texture2D(croppedTexture.width, croppedTexture.height);
+
+        // Copy the pixels of the original into the new Texture2D in the flipped order
+        for (var x = 0; x < croppedTexture.width; x++)
+        for (var y = 0; y < croppedTexture.height; y++)
+            flippedTexture.SetPixel(y, x, croppedTexture.GetPixel(croppedTexture.width - x - 1, y));
+        // Apply the changes to the new texture
+        flippedTexture.Apply();
+
+
         // Scale the image to the size of the map
-        var scaledTexture = ScaleTexture(croppedTexture, mapChunkSize); // 1px = 10m
+        var scaledTexture = ScaleTexture(flippedTexture, mapChunkSize * 10); // 1px = 1m
+        if (terrain) scaledTexture = ScaleTexture(flippedTexture, mapChunkSize); // 1px = 10m
         // Create a new float array
         var noiseMap = new float[scaledTexture.width, scaledTexture.height];
         // Loop through the image
@@ -28,13 +42,29 @@ public static class NoiseMapReader
             // Get the pixel color
             var pixelColor = scaledTexture.GetPixel(x, y);
             // Set the noise map value to the grayscale value of the pixel
-            noiseMap[x, y] = pixelColor.grayscale; // mirror the image to obtain the correct orientation
+            if (terrain)
+            {
+                noiseMap[x, y] = pixelColor.grayscale; // mirror the image to obtain the correct orientation
+            }
+            else
+            {
+                // Detect if red component is the highest (blocked)
+                if (pixelColor.r > pixelColor.g && pixelColor.r > pixelColor.b)
+                    noiseMap[x, y] = 1.0f;
+                else
+                    noiseMap[x, y] = 0.0f;
+            }
         }
 
         // Smooth the noise map
-        var smoothMap = SmoothHeightmap(noiseMap, 1);
-        // Return the noise map
-        return smoothMap;
+        if (terrain)
+        {
+            var smoothedMap = SmoothHeightmap(noiseMap, 1);
+            return smoothedMap;
+        }
+
+        // Return the noise map (blocked areas are 1.0f, free areas are 0.0f)
+        return noiseMap;
     }
 
 
