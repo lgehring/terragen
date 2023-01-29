@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using Terrain;
 using UnityEditor;
 using UnityEngine;
 using Random = UnityEngine.Random;
@@ -27,18 +28,17 @@ namespace Ecosystem
         public PlantPool plantPool;
         private int[,][] _plantBlockedZones; //TODO: make it possible to add entries from outside
         private Plant[,] _plantsMatrix;
-        private MeshCollider _terrainCollider;
+        private TerrainCollider _terrainCollider;
 
         // Awake is called when the script instance is being loaded
         private void Awake()
         {
             // Get the plantPool and terrain collider
             plantPool = GetComponent<PlantPool>();
-            _terrainCollider = GameObject.Find("Mesh").GetComponent<MeshCollider>();
+            _terrainCollider = FindObjectOfType<UnityEngine.Terrain>().GetComponent<TerrainCollider>();
 
             // Redefine bounds
-            var ecoSize = MapGenerator.mapChunkSize * 10; // in meters
-
+            var ecoSize = GameObject.Find("TerrainController").GetComponent<TerrainController>().mapSize; // in meters
             // ReSharper disable twice PossibleLossOfFraction
             bounds = new Rect(-ecoSize / 2, -ecoSize / 2, ecoSize, ecoSize);
 
@@ -153,16 +153,17 @@ namespace Ecosystem
             foreach (var group in plantGroups)
             {
                 // Check if the path exists
-                var path = MapGenerator.mapFolder + "block_" + group + ".png";
+                var path = FindObjectOfType<TerrainController>().heightmapFolder + "block_" + group + ".png";
                 if (!File.Exists(path)) continue;
                 // Get blocked map
-                var blockedMap = NoiseMapReader.ReadNoiseMap(path, MapGenerator.mapChunkSize, false);
+                var blockedMap = BlockedPlantReader.BlockedArrayFromImage(path,
+                    FindObjectOfType<TerrainController>().realImageWidthInM, (int)bounds.width);
 
-                // For every entry in the map that is 1.0f, add the plant type index to the blockedZones array
+                // For every entry in the map that is true, add the plant type index to the blockedZones array
                 for (var i = 0; i < blockedMap.GetLength(0); i++)
                 for (var j = 0; j < blockedMap.GetLength(1); j++)
                 {
-                    if (!(Math.Abs(blockedMap[i, j] - 1.0f) < 0.1f)) continue;
+                    if (!blockedMap[i, j]) continue;
                     var plantGroupIndex = plantGroups.IndexOf(group);
                     if (blockedZones[i, j] == null)
                     {
@@ -340,7 +341,9 @@ namespace Ecosystem
 
         public void PrepareEcosystem()
         {
-            _plantBlockedZones = GetBlockedZones();
+            _plantBlockedZones = FindObjectOfType<TerrainController>().useImage
+                ? GetBlockedZones()
+                : new int[(int)bounds.width, (int)bounds.height][]; // No blocked zones
             plantPool.CreatePlantPool();
         }
 

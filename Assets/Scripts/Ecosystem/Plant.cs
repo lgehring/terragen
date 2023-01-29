@@ -29,7 +29,7 @@ namespace Ecosystem
             UpdateViability(otherPlantsCoverageFrac);
             return false;
         }
-        
+
         private void UpdateViability(double otherPlantsCoverageFrac)
         {
             var normalizedAge = age / maxAge;
@@ -37,7 +37,7 @@ namespace Ecosystem
                 viability = normalizedAge;
             else
                 viability = 1 - normalizedAge;
-            
+
             // Apply environmental feedback
             viability *= otherPlantsCoverageFrac;
         }
