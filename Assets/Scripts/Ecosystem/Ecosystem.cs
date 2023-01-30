@@ -25,6 +25,7 @@ namespace Ecosystem
         public double time;
         public bool renderPlants;
         public int count;
+        public UnityEngine.Terrain terrain;
         public PlantPool plantPool;
         private int[,][] _plantBlockedZones; //TODO: make it possible to add entries from outside
         private Plant[,] _plantsMatrix;
@@ -35,17 +36,22 @@ namespace Ecosystem
         {
             // Get the plantPool and terrain collider
             plantPool = GetComponent<PlantPool>();
-            _terrainCollider = FindObjectOfType<UnityEngine.Terrain>().GetComponent<TerrainCollider>();
+            terrain = FindObjectOfType<UnityEngine.Terrain>();
+            _terrainCollider = terrain.GetComponent<TerrainCollider>();
 
             // Redefine bounds
-            var ecoSize = GameObject.Find("TerrainController").GetComponent<TerrainController>().mapSize; // in meters
+            var ecoSize = terrain.terrainData.size.x; // in meters
             // ReSharper disable twice PossibleLossOfFraction
             bounds = new Rect(-ecoSize / 2, -ecoSize / 2, ecoSize, ecoSize);
 
             // Initialize plantMatrix
             _plantsMatrix = new Plant[(int)bounds.width, (int)bounds.height]; // decimeter resolution
-
-            renderPlants = false;
+            
+            // Place details
+            PlaceGrass();
+            PlaceRandomDetails(100, 1); //rocks
+            PlaceRandomDetails(250, 2); //branches
+            PlaceRandomDetails(10, 3); //dead tree
         }
 
         // Performs full single step of the ecosystem simulation
@@ -142,6 +148,31 @@ namespace Ecosystem
             UpdateCount();
         }
 
+        private void PlaceGrass()
+        {
+            var terrainController = FindObjectOfType<TerrainController>();
+            var heightmapFolder = terrainController.heightmapFolder;
+            var realImageWidthInM = terrainController.realImageWidthInM;
+            var path = heightmapFolder + "block_grass" + ".png";
+            var grassBlockedZones = new bool[(int) bounds.width, (int) bounds.height];
+            if (File.Exists(path))
+            {
+                grassBlockedZones = BlockedPlantReader.BlockedArrayFromImage(
+                    path, realImageWidthInM, (int)bounds.width);
+            }
+            
+            var grassPositions = new List<Vector2Int>();
+            for (var i = 0; i < grassBlockedZones.GetLength(0); i++)
+                for (var j = 0; j < grassBlockedZones.GetLength(1); j++)
+                    if (!grassBlockedZones[i, j])
+                    {
+                        grassPositions.Add(new Vector2Int(i, j));
+                        grassPositions.Add(new Vector2Int(i, j));
+                    }
+            
+            PlaceDetails(grassPositions, 0);
+        }
+
         private int[,][] GetBlockedZones()
         {
             // Array of indices of blocked plants at the position in the matrix
@@ -149,15 +180,18 @@ namespace Ecosystem
             var plantTypes = PlantData.Data.Keys.Append("all").ToList(); // also check for a complete block map
             // Remove suffixes "_0", "_1", etc. and duplicates
             var plantGroups = plantTypes.Select(type => type.Split('_')[0]).Distinct().ToList();
+            var terrainController = FindObjectOfType<TerrainController>();
+            var heightmapFolder = terrainController.heightmapFolder;
+            var realImageWidthInM = terrainController.realImageWidthInM;
 
             foreach (var group in plantGroups)
             {
                 // Check if the path exists
-                var path = FindObjectOfType<TerrainController>().heightmapFolder + "block_" + group + ".png";
+                var path = heightmapFolder + "block_" + group + ".png";
                 if (!File.Exists(path)) continue;
                 // Get blocked map
                 var blockedMap = BlockedPlantReader.BlockedArrayFromImage(path,
-                    FindObjectOfType<TerrainController>().realImageWidthInM, (int)bounds.width);
+                    realImageWidthInM, (int)bounds.width);
 
                 // For every entry in the map that is true, add the plant type index to the blockedZones array
                 for (var i = 0; i < blockedMap.GetLength(0); i++)
@@ -235,6 +269,33 @@ namespace Ecosystem
             var newPlant = plantPool.GetPlant(subType, newPos, renderPlants);
             if (renderPlants) AgeScalePlant(newPlant);
             _plantsMatrix[pos.x, pos.y] = newPlant;
+        }
+        
+        private void PlaceDetails(List<Vector2Int> positions, int detailLayerIndex)
+        {
+            var terrainData = terrain.terrainData;
+            var detailMap = terrainData.GetDetailLayer(0, 0, terrainData.detailWidth, terrainData.detailHeight, detailLayerIndex);
+            var detailMapResolution = (float) terrainData.detailResolution;
+            var detailMapScale = detailMapResolution / terrainData.size.x;
+
+            foreach (var pos in positions)
+            {
+                detailMap[(int) (pos.y * detailMapScale), (int) (pos.x * detailMapScale)] = 1;
+            }
+
+            terrainData.SetDetailLayer(0, 0, detailLayerIndex, detailMap);
+        }
+        
+        private void PlaceRandomDetails(int num, int index)
+        {
+            var positions = new List<Vector2Int>();
+            for (var i = 0; i < num; i++)
+            {
+                var x = Random.Range(0, (int) bounds.width);
+                var y = Random.Range(0, (int) bounds.height);
+                positions.Add(new Vector2Int(x, y));
+            }
+            PlaceDetails(positions, index);
         }
 
         private IEnumerable<int[]> CheckArea(IReadOnlyList<int> pos, int radius)

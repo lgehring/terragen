@@ -6,56 +6,26 @@ namespace Terrain
 {
     public static class TerrainGenerator
     {
-        // edgeLengthInMeters must fit the area depicted by the provided image
-        // depthRangeInMeters must fit the height range depicted by the provided image
-        public static Tuple<TerrainData, Texture2D> TerrainFromImage(string path, int edgeLengthInMeters,
-            int depthRangeInMeters,
+        public static Tuple<float[,], Texture2D> TerrainFromImage(string path, int edgeLengthInMeters, int terrainResolution,
             int smoothingFactor = 0, int centerCropLengthInMeters = 0)
         {
-            const int resolution = 2049; // see Terrain Resolution in Unity docs
-            var terrainData = new TerrainData
-            {
-                heightmapResolution = resolution,
-                size = new Vector3(edgeLengthInMeters, depthRangeInMeters, edgeLengthInMeters)
-            };
-
             var heightMap = new Texture2D(1, 1);
             heightMap.LoadImage(File.ReadAllBytes(path));
             heightMap = TextureUtilities.FlipTexture(heightMap);
             if (centerCropLengthInMeters > 0)
             {
                 heightMap = TextureUtilities.CropCenter(heightMap, edgeLengthInMeters, centerCropLengthInMeters);
-                terrainData.size = new Vector3(centerCropLengthInMeters, depthRangeInMeters, centerCropLengthInMeters);
             }
 
-            heightMap = TextureUtilities.ScaleTexture(heightMap, resolution);
+            heightMap = TextureUtilities.ScaleTexture(heightMap, terrainResolution);
 
             var heights = TextureToHeights(heightMap);
             if (smoothingFactor > 0) heights = SmoothHeightmap(heights, smoothingFactor);
-            terrainData.SetHeights(0, 0, heights);
 
-            return new Tuple<TerrainData, Texture2D>(terrainData, heightMap);
+            return new Tuple<float[,], Texture2D>(heights, heightMap);
         }
 
-        public static TerrainData TerrainDataFromTexture(Texture2D heightMap, int edgeLengthInMeters,
-            int depthRangeInMeters)
-        {
-            const int resolution = 2049; // see Terrain Resolution in Unity docs
-            var terrainData = new TerrainData
-            {
-                heightmapResolution = resolution,
-                size = new Vector3(edgeLengthInMeters, depthRangeInMeters, edgeLengthInMeters)
-            };
-
-            heightMap = TextureUtilities.ScaleTexture(heightMap, resolution);
-
-            var heights = TextureToHeights(heightMap);
-            terrainData.SetHeights(0, 0, heights);
-
-            return terrainData;
-        }
-
-        private static float[,] TextureToHeights(Texture2D heightMap)
+        public static float[,] TextureToHeights(Texture2D heightMap)
         {
             var pixels = heightMap.GetPixels();
             var noiseMap = new float[heightMap.width, heightMap.height];
@@ -68,8 +38,7 @@ namespace Terrain
 
             return noiseMap;
         }
-
-        // Use: File.WriteAllBytes("C:\\Users\\lukas\\Pictures\\Sample.png", terrainTexture.EncodeToPNG());
+        
         public static Texture2D HeightsToTexture(float[,] heights, int resolution)
         {
             var texture = new Texture2D(resolution, resolution);

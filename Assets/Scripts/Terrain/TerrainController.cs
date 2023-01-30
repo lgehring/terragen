@@ -14,6 +14,8 @@ namespace Terrain
 
         public int depthRange = 1024;
 
+        public int terrainResolution = 2049; // number of vertices per edge
+
         // Noise settings
         public bool onlyNoiseMap;
 
@@ -60,12 +62,12 @@ namespace Terrain
             }
             else
             {
-                TerrainData terrainData;
+                float[,] heights;
                 if (useImage)
                 {
-                    var (data, heightMap) = TerrainGenerator.TerrainFromImage(heightmapFolder + "heightmap.png",
-                        realImageWidthInM, depthRange, imageSmoothingFactor, mapSize);
-                    terrainData = data;
+                    var (heightsArray, heightMap) = TerrainGenerator.TerrainFromImage(heightmapFolder + "heightmap.png",
+                        realImageWidthInM, terrainResolution, imageSmoothingFactor, mapSize);
+                    heights = heightsArray;
                     // Draw heightmap
                     var texture = TextureUtilities.FlipTexture(TextureUtilities.ScaleTexture(heightMap, mapSize / 10));
                     var planeRenderer = GameObject.Find("NoiseRenderer").GetComponent<MeshRenderer>();
@@ -75,11 +77,15 @@ namespace Terrain
                 else
                 {
                     var heightTexture = GenerateNoiseTexture();
-                    terrainData = TerrainGenerator.TerrainDataFromTexture(heightTexture, mapSize, depthRange);
+                    heights = TerrainGenerator.TextureToHeights(
+                        TextureUtilities.ScaleTexture(heightTexture, terrainResolution));
                 }
 
                 var terrain = GameObject.Find("Terrain");
-                terrain.GetComponent<UnityEngine.Terrain>().terrainData = terrainData;
+                var terrainData = terrain.GetComponent<UnityEngine.Terrain>().terrainData;
+                terrainData.SetDetailResolution(terrainResolution-1, 16);
+                terrainData.size = new Vector3(mapSize, depthRange, mapSize);
+                terrainData.SetHeights(0, 0, heights);
                 terrain.GetComponent<TerrainCollider>().terrainData = terrainData;
                 terrain.transform.position = new Vector3(-terrainData.size.x / 2, 0, -terrainData.size.z / 2);
             }
