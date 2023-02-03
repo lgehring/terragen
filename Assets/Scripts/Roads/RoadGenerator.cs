@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using Unity.VisualScripting;
 using UnityEditor;
 using UnityEngine;
+using UnityEngine.UIElements;
 
 namespace Roads
 {
@@ -15,6 +16,7 @@ namespace Roads
         public int innerRadiusForAStar;
         public int outerRadiusForAStar;
         public int gridSizeInMeters;
+        public int splineResolution;
         private GameObject endPoint;
         private GameObject startingPoint;
 
@@ -23,6 +25,12 @@ namespace Roads
             if (gridSizeInMeters < 1)
                 gridSizeInMeters = 1;
             if (gridSizeInMeters > 2410) gridSizeInMeters = 2410;
+            if (innerRadiusForAStar < 1) innerRadiusForAStar = 1;
+            if (innerRadiusForAStar > 2410) innerRadiusForAStar = 2410;
+            if (outerRadiusForAStar < 1) outerRadiusForAStar = 1;
+            if (outerRadiusForAStar > 2410) outerRadiusForAStar = 2410;
+            if (splineResolution < 1) splineResolution = 1;
+            if (splineResolution > 100) splineResolution = 100;
         }
 
         /// <summary>
@@ -108,68 +116,101 @@ namespace Roads
                 }
             }
             List<Vector3> tangents = new List<Vector3>();
-            generateSpline(path, normals, tangents);
+            (path, normals, tangents) = generateSpline(path, normals, tangents);
             generateRoadMesh(path, normals, tangents);
             
         }
 
-        private void generateSpline(List<Vector3> points, List<Vector3> normals, List<Vector3> tangents)
+        private (List<Vector3>, List<Vector3>, List<Vector3>) generateSpline(List<Vector3> points, List<Vector3> normals, List<Vector3> tangents)
         {
-            /*GameObject spline = new GameObject("Road");
-        spline.transform.parent = this.transform;
-        spline.GetOrAddComponent<SplineContainer>();
-        var splineObj = spline.GetComponent<SplineContainer>().Spline;
-        for (int i = 0; i < points.Count; i++)
-        {
-            splineObj.Add(new BezierKnot(points[i]));
-        }
-
-        spline.AddComponent<SplineExtrude>();
-        var splineMesh = spline.GetComponent<SplineExtrude>();
-        splineMesh.Radius = 2f;
-        splineMesh.Rebuild();
-        */
-            for (int i = 0; i < points.Count; i++)
+            if (points.Count < 3)
+                throw new ArgumentException("The road has to have at least 3 nodes");
+            tangents.Add(points[1] - points[0]);
+            for (int i = 0; i < points.Count - 2; i++)
             {
-                if (i == points.Count - 1)
+                tangents.Add(points[i + 2] - points[i]);
+            }
+            tangents.Add(points[points.Count - 1] - points[points.Count - 2]);
+            if (splineResolution == 1)
+            {
+                return (points, normals, tangents);
+            }
+            List<Vector3> newPoints = new List<Vector3>();
+            List<Vector3> newNormals = new List<Vector3>();
+            List<Vector3> newTangents = new List<Vector3>();
+
+
+            for (int i = 0; i < splineResolution; i++)
+            {
+                float t = (float)i / splineResolution;
+                newPoints.Add((1-t) * points[0] + t * points[1]);
+                newNormals.Add((1 - t) * normals[0] + t * normals[1]);
+                newTangents.Add((1 - t) * tangents[0] + t * tangents[1]);
+            }
+            
+            for (int j = 1; j < points.Count - 2; j++)
+            {
+                Vector3 p0 = points[j];
+                Vector3 p1 = 0.5f * (-points[j - 1] + points[j + 1]);
+                Vector3 p2 = 0.5f * (2 * points[j-1] - 5* points[j] + 4 * points[j+1] - points[j+2]);
+                Vector3 p3 = 0.5f * (-points[j-1] + 3 * points[j] - 3 * points[j+1] + points[j+2]);
+
+                Vector3 n0 = normals[j];
+                Vector3 n1 = 0.5f * (-normals[j - 1] + normals[j + 1]);
+                Vector3 n2 = 0.5f * (2 * normals[j - 1] - 5 * normals[j] + 4 * normals[j + 1] - normals[j+2]);
+                Vector3 n3 = 0.5f * (-normals[j - 1] + 3 * normals[j] - 3 * normals[j + 1] + normals[j + 2]);
+
+                Vector3 t0 = tangents[j];
+                Vector3 t1 = 0.5f * (-tangents[j - 1] + tangents[j + 1]);
+                Vector3 t2 = 0.5f * (2 * tangents[j - 1] - 5 * tangents[j] + 4 * tangents[j + 1] - tangents[j+2]);
+                Vector3 t3 = 0.5f * (-tangents[j - 1] + 3 * tangents[j] - 3 * tangents[j + 1] + tangents[j + 2]);
+
+                for (int i = 0; i < splineResolution; i++)
                 {
-                    tangents.Add((points[i] - points[i - 1]).normalized);
-                }
-                else
-                {
-                    tangents.Add((points[i + 1] - points[i]).normalized);
+                    float t = (float)i / splineResolution;
+                    newPoints.Add(p0 + t * p1 + t * t * p2 + t * t * t * p3);
+                    newNormals.Add(n0 + t * n1 + t * t * n2 + t * t * t * n3);
+                    newTangents.Add(t0 + t * t1 + t * t * t2 + t * t * t * t3);
                 }
             }
+
+            for (int i = 0; i < splineResolution; i++)
+            {
+                float t = (float)i / splineResolution;
+                newPoints.Add((1 - t) * points[points.Count-2] + t * points[points.Count-1]);
+                newNormals.Add((1 - t) * normals[points.Count - 2] + t * normals[points.Count - 1]);
+                newTangents.Add((1 - t) * tangents[points.Count - 2] + t * tangents[points.Count - 1]);
+            }
+
+            return (newPoints, newNormals, newTangents);
         }
 
         private void generateRoadMesh(List<Vector3> points, List<Vector3> normals, List<Vector3> tangents)
         {
             var segments = new RoadSegments(points, normals);
 
-            var roadMesh = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Resources/StraightRoad.prefab");
+            GameObject roadMesh = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Resources/StraightRoad.prefab");
 
             for (var i = 0; i < points.Count - 1; i++)
             {
-                GameObject roadSegment = GameObject.Instantiate(roadMesh, this.transform, true);
+                GameObject roadSegment = new GameObject("RoadSegment");
                 roadSegment.transform.position = points[i];
                 roadSegment.transform.parent = this.transform;
                 roadSegment.transform.rotation = Quaternion.LookRotation(tangents[i], normals[i]);
                 roadSegment.transform.rotation *= Quaternion.Euler(-90, 0, 0);
 
-                //roadSegment.AddComponent<MeshFilter>();
-                //roadSegment.GetComponent<MeshFilter>().sharedMesh = roadMesh.GetComponent<MeshFilter>().sharedMesh;
-                //roadSegment.AddComponent<MeshRenderer>();
+                roadSegment.AddComponent<MeshFilter>();
+                roadSegment.AddComponent<MeshRenderer>();
                 
-                //var roadSegmentRenderer = roadSegment.GetComponent<MeshRenderer>();
-                //roadSegmentRenderer = Instantiate(roadMesh.GetComponent<MeshRenderer>());
-                //roadSegmentRenderer.sharedMaterials = roadMesh.GetComponent<MeshRenderer>().sharedMaterials;
+                roadSegment.AddComponent<MeshCollider>();
+                roadSegment.GetComponent<MeshFilter>().sharedMesh = new Mesh();
+                var segmentMesh = roadSegment.GetComponent<MeshFilter>().sharedMesh;
+                //segmentMesh = new Mesh();
                 
-                //roadSegment.AddComponent<MeshCollider>();
-                //var roadSegmentMesh = roadSegment.GetComponent<MeshFilter>();
-                //roadSegmentMesh.sharedMesh = new Mesh();
-                
-                //cloneMesh(roadSegmentMesh.sharedMesh, roadMesh.GetComponent<MeshFilter>().sharedMesh);
+                cloneMesh(segmentMesh, roadMesh.GetComponent<MeshFilter>().sharedMesh);
                 DeformMesh(roadSegment, points[i], points[i + 1], tangents[i], tangents[i+1], normals[i], normals[i+1]);
+                
+                roadSegment.GetComponent<MeshRenderer>().sharedMaterials = roadMesh.GetComponent<MeshRenderer>().sharedMaterials;
             }
         }
 
@@ -183,9 +224,16 @@ namespace Roads
 
             Vector3 startCross = Vector3.Cross(tangentStart, normalStart).normalized;
             Vector3 endCross = Vector3.Cross(tangentEnd, normalEnd).normalized;
-            float Theta = Vector2.Angle(new Vector2(endCross.x, endCross.z), new Vector2(startCross.x, startCross.z));
-            float Phi = Vector2.Angle(new Vector2(tangentStart.x, tangentStart.z), new Vector2(tangentEnd.x, tangentEnd.z));
-
+            Quaternion toLocal = Quaternion.FromToRotation(tangentStart, new Vector3(0, 0, 1));
+            Quaternion toWorld = Quaternion.FromToRotation(new Vector3(0, 0, 1), tangentStart);
+            tangentStart = toLocal * tangentStart;
+            tangentEnd = toLocal * tangentEnd;
+            Vector2 tangentStartXY = new Vector2(tangentStart.x, tangentStart.z).normalized;
+            Vector2 tangentEndXY = new Vector2(tangentEnd.x, tangentEnd.z).normalized;
+            float cosPhi = Vector2.Dot(tangentStartXY, tangentEndXY);
+            float sinPhi = Mathf.Sqrt(1 - cosPhi * cosPhi);
+            
+            sinPhi =  tangentEnd.x > 0 ? sinPhi : -sinPhi;
             for (var i = 0; i < vertices.Length; i++)
             {
                 var vertex = vertices[i];
@@ -194,20 +242,20 @@ namespace Roads
                     vertices[i] = meshTransform.TransformPoint(vertex);
                     vertices[i] = start;
                     vertices[i] = meshTransform.InverseTransformPoint(vertices[i]);
-                    vertices[i].x += vertex.x * 20f;
-                    vertices[i].z += vertex.z * 20f;
+                    vertices[i].x += vertex.x;
+                    vertices[i].z += vertex.z;
                 }
                 else
                 {
                     vertices[i] = meshTransform.TransformPoint(vertex);
                     vertices[i] = end;
                     vertices[i] = meshTransform.InverseTransformPoint(vertices[i]);
-                    vertices[i].x += vertex.x * 20f;
-                    vertices[i].z += vertex.z * 20f;
-                    vertices[i].y += vertices[i].x * Mathf.Sin(-Theta * Mathf.Deg2Rad);
-                    vertices[i].x *= Mathf.Cos(Theta * Mathf.Deg2Rad);
+                    vertices[i].x += vertex.x;
+                    vertices[i].z += vertex.z;
+                    vertices[i].y += vertices[i].x * sinPhi;
+                    vertices[i].x *= cosPhi;
 
-                    
+
                 }
 
             }
@@ -215,14 +263,10 @@ namespace Roads
             mesh.vertices = vertices;
             mesh.normals = normals;
             mesh.uv = uvs;
-            mesh.RecalculateNormals();
-            mesh.RecalculateBounds();
-            Debug.DrawLine(start, start + normalStart, Color.red, 10, false);
         }
 
         private void cloneMesh(Mesh targetMesh, Mesh original)
         {
-            targetMesh.subMeshCount = original.subMeshCount;
             targetMesh.vertices = original.vertices;
             targetMesh.normals = original.normals;
             targetMesh.uv = original.uv;
