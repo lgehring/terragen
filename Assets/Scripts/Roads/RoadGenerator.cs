@@ -69,7 +69,6 @@ namespace Roads
             var path = new List<Vector3>();
             var normals = new List<Vector3>();
             var prevIdx = endingIdx;
-            //print(road.nodes[endingIdx].predIdx);
             var index = road.nodes[prevIdx].predIdx;
             path.Add(new Vector3(road.nodes[prevIdx].pos.x, road.nodes[prevIdx].mapHeight, road.nodes[prevIdx].pos.z));
             normals.Add(road.nodes[prevIdx].normal);
@@ -77,7 +76,8 @@ namespace Roads
             while (index != startIdx)
             {
                 if (count > 1000) throw new ArgumentException("The road is too long");
-                if (road.nodes[index].roadType == RoadNodeType.Tunnel)
+                //TODO: Fix tunnels
+                if (road.nodes[index].roadType == RoadNodeType.Tunnel && false)
                 {
                     var tunnelNodes = 2;
                     var tunnelStartIdx = prevIdx;
@@ -189,29 +189,47 @@ namespace Roads
         {
             var segments = new RoadSegments(points, normals);
 
-            GameObject roadMesh = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Resources/StraightRoad.prefab");
+            GameObject roadMesh = PrefabUtility.LoadPrefabContents("Assets/Resources/StraightRoad.prefab");
+            GameObject[] roadSegments = new GameObject[points.Count - 1];
 
             for (var i = 0; i < points.Count - 1; i++)
             {
-                GameObject roadSegment = new GameObject("RoadSegment");
-                roadSegment.transform.position = points[i];
-                roadSegment.transform.parent = this.transform;
-                roadSegment.transform.rotation = Quaternion.LookRotation(tangents[i], normals[i]);
-                roadSegment.transform.rotation *= Quaternion.Euler(-90, 0, 0);
+                roadSegments[i] = Instantiate(roadMesh);
+                roadSegments[i].transform.position = points[i];
+                roadSegments[i].transform.parent = this.transform;
+                
+                roadSegments[i].GetComponent<MeshFilter>().sharedMesh = new Mesh();
+                roadSegments[i].GetComponent<MeshFilter>().sharedMesh = (Mesh)Instantiate(roadMesh.GetComponent<MeshFilter>().sharedMesh);
+                DeformMesh(roadSegments[i], points[i], points[i + 1], tangents[i], tangents[i+1], normals[i], normals[i+1]);
 
-                roadSegment.AddComponent<MeshFilter>();
-                roadSegment.AddComponent<MeshRenderer>();
+                var uvs = roadSegments[i].GetComponent<MeshFilter>().sharedMesh.uv;
                 
-                roadSegment.AddComponent<MeshCollider>();
-                roadSegment.GetComponent<MeshFilter>().sharedMesh = new Mesh();
-                var segmentMesh = roadSegment.GetComponent<MeshFilter>().sharedMesh;
-                //segmentMesh = new Mesh();
+                for (var j = 0; j < uvs.Length; j++)
+                {
+                    uvs[j] = new Vector2(uvs[j].x, uvs[j].y * Vector3.Distance(points[i], points[i + 1])/30);
+                }
                 
-                cloneMesh(segmentMesh, roadMesh.GetComponent<MeshFilter>().sharedMesh);
-                DeformMesh(roadSegment, points[i], points[i + 1], tangents[i], tangents[i+1], normals[i], normals[i+1]);
                 
-                roadSegment.GetComponent<MeshRenderer>().sharedMaterials = roadMesh.GetComponent<MeshRenderer>().sharedMaterials;
+                
+                roadSegments[i].GetComponent<MeshFilter>().sharedMesh.uv = uvs;
+                //roadSegments[i].GetComponent<MeshRenderer>().sharedMaterials;
             }
+
+            //GameObject finalRoadSegment = GetComponentsInChildren<Transform>()[2].gameObject;
+            //finalRoadSegment.transform.position = new Vector3(0, 0, 0);
+
+            //for (var i = GetComponentsInChildren<Transform>().Length - 1; i > 3; i--)
+            //{
+            //    combineMesh(finalRoadSegment, GetComponentsInChildren<Transform>()[i].gameObject);
+            //}
+
+            //for (var i = GetComponentsInChildren<Transform>().Length - 2; i > 2; i--)
+            //{
+            //    var toBeDestroyed = GetComponentsInChildren<Transform>()[i].gameObject;
+            //    DestroyImmediate(toBeDestroyed);
+            //}
+
+            //finalRoadSegment.GetComponent<MeshRenderer>().sharedMaterials = roadMesh.GetComponent<MeshRenderer>().sharedMaterials;
         }
 
         private void DeformMesh(GameObject roadSegment, Vector3 start, Vector3 end, Vector3 tangentStart, Vector3 tangentEnd, Vector3 normalStart, Vector3 normalEnd)
@@ -222,42 +240,32 @@ namespace Roads
             var normals = mesh.normals;
             var uvs = mesh.uv;
 
-            Vector3 startCross = Vector3.Cross(tangentStart, normalStart).normalized;
-            Vector3 endCross = Vector3.Cross(tangentEnd, normalEnd).normalized;
-            Quaternion toLocal = Quaternion.FromToRotation(tangentStart, new Vector3(0, 0, 1));
-            Quaternion toWorld = Quaternion.FromToRotation(new Vector3(0, 0, 1), tangentStart);
-            tangentStart = toLocal * tangentStart;
-            tangentEnd = toLocal * tangentEnd;
-            Vector2 tangentStartXY = new Vector2(tangentStart.x, tangentStart.z).normalized;
-            Vector2 tangentEndXY = new Vector2(tangentEnd.x, tangentEnd.z).normalized;
-            float cosPhi = Vector2.Dot(tangentStartXY, tangentEndXY);
-            float sinPhi = Mathf.Sqrt(1 - cosPhi * cosPhi);
-            
-            sinPhi =  tangentEnd.x > 0 ? sinPhi : -sinPhi;
+            Quaternion startRotation = Quaternion.LookRotation(tangentStart, normalStart);
+            Quaternion endRotation = Quaternion.LookRotation(tangentEnd, normalEnd);
+ 
             for (var i = 0; i < vertices.Length; i++)
             {
                 var vertex = vertices[i];
-                if (vertex.y > 0f)
+                if (vertex.z < 0f)
+                {
+                    
+                    vertices[i] = meshTransform.TransformPoint(vertex);
+                    vertices[i] = start;
+                    vertices[i] = meshTransform.InverseTransformPoint(vertices[i]);
+                    vertices[i].x += vertex.x;
+                    vertices[i].y += vertex.y;
+                    vertices[i] = startRotation * vertices[i];
+                }
+                else
                 {
                     vertices[i] = meshTransform.TransformPoint(vertex);
                     vertices[i] = start;
                     vertices[i] = meshTransform.InverseTransformPoint(vertices[i]);
                     vertices[i].x += vertex.x;
-                    vertices[i].z += vertex.z;
+                    vertices[i].y += vertex.y;
+                    vertices[i] = endRotation * vertices[i];
+                    vertices[i] += end - start;
                 }
-                else
-                {
-                    vertices[i] = meshTransform.TransformPoint(vertex);
-                    vertices[i] = end;
-                    vertices[i] = meshTransform.InverseTransformPoint(vertices[i]);
-                    vertices[i].x += vertex.x;
-                    vertices[i].z += vertex.z;
-                    vertices[i].y += vertices[i].x * sinPhi;
-                    vertices[i].x *= cosPhi;
-
-
-                }
-
             }
 
             mesh.vertices = vertices;
@@ -265,14 +273,60 @@ namespace Roads
             mesh.uv = uvs;
         }
 
-        private void cloneMesh(Mesh targetMesh, Mesh original)
+        private void cloneMesh(MeshFilter[] targetMeshes, MeshFilter[] originalMeshes)
         {
-            targetMesh.vertices = original.vertices;
-            targetMesh.normals = original.normals;
-            targetMesh.uv = original.uv;
-            targetMesh.triangles = original.triangles;
-            targetMesh.tangents = original.tangents;
-            targetMesh.bounds = original.bounds;
+            for (int i = 0; i < targetMeshes.Length; i++)
+            {
+                targetMeshes[i].sharedMesh.vertices = originalMeshes[i].sharedMesh.vertices;
+                targetMeshes[i].sharedMesh.normals = originalMeshes[i].sharedMesh.normals;
+                targetMeshes[i].sharedMesh.uv = originalMeshes[i].sharedMesh.uv;
+                targetMeshes[i].sharedMesh.triangles = originalMeshes[i].sharedMesh.triangles;
+                targetMeshes[i].sharedMesh.tangents = originalMeshes[i].sharedMesh.tangents;
+                targetMeshes[i].sharedMesh.bounds = originalMeshes[i].sharedMesh.bounds;
+            }
+        }
+
+        private void combineMesh(GameObject target, GameObject original)
+        {
+            MeshFilter[] targetMeshes = target.GetComponentsInChildren<MeshFilter>();
+            MeshFilter[] originalMeshes = original.GetComponentsInChildren<MeshFilter>();
+            var targetMesh = target.GetComponent<MeshFilter>();
+            var originalMesh = original.GetComponent<MeshFilter>();
+            
+            int tmCount = target.GetComponent<MeshFilter>().sharedMesh.subMeshCount;
+            int omCount = original.GetComponent<MeshFilter>().sharedMesh.subMeshCount;
+            
+            if(false)
+            {
+                CombineInstance[] combine = new CombineInstance[tmCount + omCount];
+                
+                for (int i = 0; i < tmCount; i++)
+                {
+                    print(i);
+                    combine[i * 2].mesh = targetMeshes[i].sharedMesh;
+                    combine[i * 2].transform = targetMeshes[i].transform.localToWorldMatrix;
+                    combine[i * 2].subMeshIndex = 0;
+                    
+                    combine[i * 2 + 1].mesh = originalMeshes[i].sharedMesh;
+                    combine[i * 2 + 1].transform = originalMeshes[i].transform.localToWorldMatrix;
+                    combine[i * 2 + 1].subMeshIndex = 0;
+                }
+
+                targetMesh.sharedMesh = new Mesh();
+                targetMesh.sharedMesh.CombineMeshes(combine);
+            }
+            else { 
+                CombineInstance[] combine = new CombineInstance[2];
+
+                combine[0].mesh = targetMesh.sharedMesh;
+                combine[0].transform = targetMesh.transform.localToWorldMatrix;
+
+                combine[1].mesh = originalMesh.sharedMesh;
+                combine[1].transform = originalMesh.transform.localToWorldMatrix;
+
+                targetMesh.sharedMesh = new Mesh();
+                targetMesh.sharedMesh.CombineMeshes(combine);
+            }
         }
     }
 }
