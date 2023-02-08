@@ -14,8 +14,6 @@ namespace Terrain
 
         public int depthRange = 1024;
 
-        public int terrainResolution = 2049; // number of vertices per edge
-
         // Noise settings
         public bool onlyNoiseMap;
 
@@ -52,11 +50,13 @@ namespace Terrain
 
         public void DrawMapInEditor()
         {
+            var terrainResolution = mapSize + 1;
             if (onlyNoiseMap)
             {
                 var planeRenderer = GameObject.Find("NoiseRenderer").GetComponent<MeshRenderer>();
-                var heightTexture = GenerateNoiseTexture();
-                var texture = TextureUtilities.FlipTexture(heightTexture);
+                var noiseTexture = TerrainGenerator.HeightsToTexture(GenerateNoise(terrainResolution));
+                var texture = TextureUtilities.ScaleTexture(noiseTexture, mapSize / 10); // match terrain
+                texture = TextureUtilities.FlipTexture(texture);
                 planeRenderer.sharedMaterial.mainTexture = texture;
                 planeRenderer.transform.localScale = new Vector3(texture.width, 1, texture.height);
             }
@@ -76,14 +76,13 @@ namespace Terrain
                 }
                 else
                 {
-                    var heightTexture = GenerateNoiseTexture();
-                    heights = TerrainGenerator.TextureToHeights(
-                        TextureUtilities.ScaleTexture(heightTexture, terrainResolution));
+                    heights = GenerateNoise(terrainResolution);
                 }
 
                 var terrain = GameObject.Find("Terrain");
                 var terrainData = terrain.GetComponent<UnityEngine.Terrain>().terrainData;
                 terrainData.SetDetailResolution(terrainResolution-1, 16);
+                terrainData.heightmapResolution = terrainResolution;
                 terrainData.size = new Vector3(mapSize, depthRange, mapSize);
                 terrainData.SetHeights(0, 0, heights);
                 terrain.GetComponent<TerrainCollider>().terrainData = terrainData;
@@ -91,13 +90,12 @@ namespace Terrain
             }
         }
 
-        private Texture2D GenerateNoiseTexture()
+        private float[,] GenerateNoise(int resolution)
         {
-            var heightArray = Noise.GenerateNoiseMap(mapSize, seed, noiseScale, octaves, persistance,
+            var heightArray = Noise.GenerateNoiseMap(resolution, seed, noiseScale, octaves, persistance,
                 lacunarity, offset, warpingStrength);
-            var heightTexture = TerrainGenerator.HeightsToTexture(heightArray, mapSize / 10);
 
-            return heightTexture;
+            return heightArray;
         }
     }
 }

@@ -17,8 +17,8 @@ namespace Editor
             // If checks if any value was changed
             if (DrawDefaultInspector())
                 // allows the Generator of the map to auto update
-                if (mapGen.onlyNoiseMap)
-                    mapGen.DrawMapInEditor();
+                // if (mapGen.onlyNoiseMap)
+                //     mapGen.DrawMapInEditor();
 
             EditorGUILayout.Toggle("Only Noise Map", mapGen.onlyNoiseMap);
             GameObject.Find("Terrain").GetComponent<UnityEngine.Terrain>().enabled = !mapGen.onlyNoiseMap;

@@ -4,68 +4,54 @@ using Random = System.Random;
 namespace Terrain
 {
     /// <summary>
-    ///     A script that is going to generate a noise map. Source: https://www.youtube.com/watch?v=WP-Bm65Q-1Y
-    ///     a youtube series by Sebastian Lague
+    ///     A script that generates a noise map.
+    ///     Source: https://www.youtube.com/watch?v=WP-Bm65Q-1Y, a youtube series by Sebastian Lague
     /// </summary>
     public static class Noise
     {
         /// <summary>
         ///     Generates a noise map using perlin noise
         /// </summary>
-        /// <param name="mapWidth"> The width of the map</param>
-        /// <param name="mapHeight"> The height of the map</param>
+        /// <param name="resolution"> The width and height of the map</param>
         /// <param name="seed"> Variable to generate the same map again</param>
         /// <param name="scale"> The scale of the noise</param>
-        /// <param name="octaves"> Determins how much impact the persistance and lacunarity have: 1 for no influence</param>
-        /// <param name="persistance"> Number between 0 and 1 which influnces the amplitued</param>
-        /// <param name="lacunartiy"> Number greater than 1 which influnces the frequency</param>
+        /// <param name="octaves"> Determines how much impact the persistence and lacunarity have: 1 for no influence</param>
+        /// <param name="persistence"> Number between 0 and 1 which influences the amplitude</param>
+        /// <param name="lacunarity"> Number greater than 1 which influences the frequency</param>
         /// <param name="offset"> An extra offset applied by the user</param>
-        /// <returns> A noise map using perlin noise</returns>
-        public static float[,] GenerateNoiseMap(int mapSize, int seed, float scale, int octaves,
-            float persistance, float lacunartiy, Vector2 offset, float warpingStrenght)
+        /// <param name="warping"> Domain warping strength </param>
+        /// <returns> A float[,] noise map using perlin noise</returns>
+        public static float[,] GenerateNoiseMap(int resolution, int seed, float scale, int octaves,
+            float persistence, float lacunarity, Vector2 offset, float warping)
         {
-            mapSize /= 10;
-            var noiseMap = new float[mapSize, mapSize];
-
-            // adding the seed to the map
+            var noiseMap = new float[resolution, resolution];
             var prng = new Random(seed);
             var octaveOffsets = new Vector2[octaves];
-
             float maxPossibleHeight = 0;
-            // infuences the largest value possible
             float amplitude = 1;
-            // influnces the variance of the samples
-            float frequency = 1;
 
+            // Determine random octave offsets
             for (var i = 0; i < octaves; ++i)
             {
-                // The magic numbers -100000 to 100000 seem to be the perfect interval
-                var offsetX = prng.Next(-100000, 100000) + offset.x;
-                var offsetY = prng.Next(-100000, 100000) - offset.y;
+                const int octaveOffset = -100000;
+                var offsetX = prng.Next(-octaveOffset, octaveOffset) + offset.x;
+                var offsetY = prng.Next(-octaveOffset, octaveOffset) - offset.y;
                 octaveOffsets[i] = new Vector2(offsetX, offsetY);
-
                 maxPossibleHeight += amplitude;
-                amplitude *= persistance;
+                amplitude *= persistence;
             }
-
-            // Checks if the scale is zero and clamps it if yes
-            if (scale <= 0) scale = 0.0001f;
-
-            // used for normalization
-            var maxLocalNoiseHeight = float.MinValue;
-            var minLocalNoiseHeight = float.MaxValue;
-
-            // Changes so that the map zooms inside of the middle of the map for large scale values
-            var halfMapSize = mapSize / 2f;
+            
+            if (scale <= 0) scale = 0.0001f; // Ensure scale > 0
+            var halfMapSize = resolution / 2f; // Zoom into middle
 
             // Loop over every vertex
-            for (var y = 0; y < mapSize; ++y)
-            for (var x = 0; x < mapSize; ++x)
+            for (var y = 0; y < resolution; ++y)
+            for (var x = 0; x < resolution; ++x)
             {
                 // infuences the largest value possible
                 amplitude = 1;
                 // influnces the variance of the samples
-                frequency = 1;
+                float frequency = 1; // influnces the variance of the samples
                 float noiseHeight = 0;
 
                 // domain warping
@@ -82,21 +68,25 @@ namespace Terrain
 
                     var r = new float[2]
                     {
-                        Mathf.PerlinNoise(sampleX + warpingStrenght * q[0] + 1.7f,
-                            sampleY + warpingStrenght * q[0] + 9.2f) * 2 - 1,
-                        Mathf.PerlinNoise(sampleX + warpingStrenght * q[0] + 8.3f,
-                            sampleX + warpingStrenght * q[0] + 2.8f) * 2 - 1
+                        Mathf.PerlinNoise(sampleX + warping * q[0] + 1.7f,
+                            sampleY + warping * q[0] + 9.2f) * 2 - 1,
+                        Mathf.PerlinNoise(sampleX + warping * q[0] + 8.3f,
+                            sampleX + warping * q[0] + 2.8f) * 2 - 1
                     };
 
                     noiseHeight +=
-                        (Mathf.PerlinNoise(sampleX + warpingStrenght * r[0], sampleY + warpingStrenght * r[1]) * 2 -
+                        (Mathf.PerlinNoise(sampleX + warping * r[0], sampleY + warping * r[1]) * 2 -
                          1) *
                         amplitude;
 
-                    amplitude *= persistance;
+                    amplitude *= persistence;
 
-                    frequency *= lacunartiy;
+                    frequency *= lacunarity;
                 }
+                
+                // used for normalization
+                var maxLocalNoiseHeight = float.MinValue;
+                var minLocalNoiseHeight = float.MaxValue;
 
                 // Getting the max and min noise height for normalization later on
                 if (noiseHeight > maxLocalNoiseHeight)
@@ -106,16 +96,15 @@ namespace Terrain
                 noiseMap[x, y] = noiseHeight;
             }
 
-            // normilization 
-            for (var y = 0; y < mapSize; ++y)
-            for (var x = 0; x < mapSize; ++x)
-                if (true) // was LOCAL normalization
-                    noiseMap[x, y] = Mathf.InverseLerp(minLocalNoiseHeight, maxLocalNoiseHeight, noiseMap[x, y]);
-            // else // was GLOBAL
-            // {
-            //     var normalizedHeight = (noiseMap[x, y] + 1) / (maxPossibleHeight / 0.9f);
-            //     noiseMap[x, y] = Mathf.Clamp(normalizedHeight, 0, int.MaxValue);
-            // }
+            // Global normalization 
+            for (var y = 0; y < resolution; ++y)
+            for (var x = 0; x < resolution; ++x)
+            {
+                var normalizedHeight = (noiseMap[x, y] + 1) / (maxPossibleHeight / 0.9f);
+                noiseMap[x, y] = Mathf.Clamp(normalizedHeight, 0, int.MaxValue);
+                // LOCAL normalization:
+                // noiseMap[x, y] = Mathf.InverseLerp(minLocalNoiseHeight, maxLocalNoiseHeight, noiseMap[x, y]);
+            }
 
             return noiseMap;
         }

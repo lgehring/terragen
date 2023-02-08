@@ -25,7 +25,7 @@ namespace Terrain
             return new Tuple<float[,], Texture2D>(heights, heightMap);
         }
 
-        public static float[,] TextureToHeights(Texture2D heightMap)
+        private static float[,] TextureToHeights(Texture2D heightMap)
         {
             var pixels = heightMap.GetPixels();
             var noiseMap = new float[heightMap.width, heightMap.height];
@@ -39,11 +39,11 @@ namespace Terrain
             return noiseMap;
         }
         
-        public static Texture2D HeightsToTexture(float[,] heights, int resolution)
+        public static Texture2D HeightsToTexture(float[,] heights)
         {
-            var texture = new Texture2D(resolution, resolution);
-            for (var x = 0; x < resolution; x++)
-            for (var y = 0; y < resolution; y++)
+            var texture = new Texture2D(heights.GetLength(0), heights.GetLength(1));
+            for (var x = 0; x < heights.GetLength(0); x++)
+            for (var y = 0; y < heights.GetLength(1); y++)
             {
                 var heightValue = heights[x, y];
                 texture.SetPixel(x, y, new Color(heightValue, heightValue, heightValue));
