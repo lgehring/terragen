@@ -21,8 +21,6 @@ namespace Terrain
 
         public int octaves;
 
-        [Range(0, 1)] public float persistance;
-
         public float lacunarity;
 
         public int seed;
@@ -31,6 +29,8 @@ namespace Terrain
 
         public float warpingStrength;
 
+        public float heightSquish = 1.0f;
+
         // Heightmap import settings
         public bool useImage;
 
@@ -38,7 +38,7 @@ namespace Terrain
 
         public int realImageWidthInM = 8000;
 
-        public int imageSmoothingFactor = 3;
+        public int imageSmoothingFactor = 6;
 
         private void OnValidate()
         {
@@ -92,8 +92,8 @@ namespace Terrain
 
         private float[,] GenerateNoise(int resolution)
         {
-            var heightArray = Noise.GenerateNoiseMap(resolution, seed, noiseScale, octaves, persistance,
-                lacunarity, offset, warpingStrength);
+            var heightArray = Noise.GenerateNoiseMap(resolution, seed, noiseScale, octaves,
+                lacunarity, offset, warpingStrength, heightSquish);
 
             return heightArray;
         }
