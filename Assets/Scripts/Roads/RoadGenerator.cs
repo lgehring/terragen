@@ -3,7 +3,9 @@ using System.Collections.Generic;
 using Unity.VisualScripting;
 using UnityEditor;
 using UnityEngine;
+using UnityEngine.Rendering;
 using UnityEngine.UIElements;
+using static UnityEngine.GraphicsBuffer;
 
 namespace Roads
 {
@@ -13,6 +15,8 @@ namespace Roads
     public class RoadGenerator : MonoBehaviour
     {
         public Transform map;
+        public GameObject terrain;
+        private TerrainData backupData;
         public int innerRadiusForAStar;
         public int outerRadiusForAStar;
         public int gridSizeInMeters;
@@ -39,6 +43,11 @@ namespace Roads
         /// <exception cref="ArgumentException"> Throws an exception if the road has to many nodes </exception>
         public void drawRoadMesh()
         {
+            if (map == null) 
+                throw new ArgumentException("The map is null");
+            if (terrain == null) 
+                throw new ArgumentException("The terrain is null");
+
             startingPoint = GetComponentsInChildren<Transform>()[1].gameObject;
             endPoint = GetComponentsInChildren<Transform>()[2].gameObject;
 
@@ -197,39 +206,26 @@ namespace Roads
                 roadSegments[i] = Instantiate(roadMesh);
                 roadSegments[i].transform.position = points[i];
                 roadSegments[i].transform.parent = this.transform;
-                
+
                 roadSegments[i].GetComponent<MeshFilter>().sharedMesh = new Mesh();
                 roadSegments[i].GetComponent<MeshFilter>().sharedMesh = (Mesh)Instantiate(roadMesh.GetComponent<MeshFilter>().sharedMesh);
                 DeformMesh(roadSegments[i], points[i], points[i + 1], tangents[i], tangents[i+1], normals[i], normals[i+1]);
-
-                var uvs = roadSegments[i].GetComponent<MeshFilter>().sharedMesh.uv;
-                
-                for (var j = 0; j < uvs.Length; j++)
-                {
-                    uvs[j] = new Vector2(uvs[j].x, uvs[j].y * Vector3.Distance(points[i], points[i + 1])/30);
-                }
-                
-                
-                
-                roadSegments[i].GetComponent<MeshFilter>().sharedMesh.uv = uvs;
-                //roadSegments[i].GetComponent<MeshRenderer>().sharedMaterials;
             }
 
-            //GameObject finalRoadSegment = GetComponentsInChildren<Transform>()[2].gameObject;
-            //finalRoadSegment.transform.position = new Vector3(0, 0, 0);
+            combineMeshes(roadSegments);
 
-            //for (var i = GetComponentsInChildren<Transform>().Length - 1; i > 3; i--)
-            //{
-            //    combineMesh(finalRoadSegment, GetComponentsInChildren<Transform>()[i].gameObject);
-            //}
+            GameObject endRoad = GetComponentsInChildren<Transform>()[3].GameObject();
 
-            //for (var i = GetComponentsInChildren<Transform>().Length - 2; i > 2; i--)
-            //{
-            //    var toBeDestroyed = GetComponentsInChildren<Transform>()[i].gameObject;
-            //    DestroyImmediate(toBeDestroyed);
-            //}
+            var uvs = endRoad.GetComponent<MeshFilter>().sharedMesh.uv;
 
-            //finalRoadSegment.GetComponent<MeshRenderer>().sharedMaterials = roadMesh.GetComponent<MeshRenderer>().sharedMaterials;
+            for (var j = 0; j < uvs.Length; j++)
+            {
+                uvs[j] = new Vector2(uvs[j].x, uvs[j].y * Vector3.Distance(points[0], points[points.Count - 1]) / 100);
+            }
+
+            endRoad.GetComponent<MeshFilter>().sharedMesh.uv = uvs;
+
+            mapTerrainToRoad(endRoad);
         }
 
         private void DeformMesh(GameObject roadSegment, Vector3 start, Vector3 end, Vector3 tangentStart, Vector3 tangentEnd, Vector3 normalStart, Vector3 normalEnd)
@@ -273,60 +269,106 @@ namespace Roads
             mesh.uv = uvs;
         }
 
-        private void cloneMesh(MeshFilter[] targetMeshes, MeshFilter[] originalMeshes)
+        private void combineMeshes(GameObject[] targets)
         {
-            for (int i = 0; i < targetMeshes.Length; i++)
+            int meshCount = targets[0].GetComponent<MeshFilter>().sharedMesh.subMeshCount;
+            Mesh[] resultingMeshes = new Mesh[meshCount];
+            for (int i = 0; i < meshCount; i++)
             {
-                targetMeshes[i].sharedMesh.vertices = originalMeshes[i].sharedMesh.vertices;
-                targetMeshes[i].sharedMesh.normals = originalMeshes[i].sharedMesh.normals;
-                targetMeshes[i].sharedMesh.uv = originalMeshes[i].sharedMesh.uv;
-                targetMeshes[i].sharedMesh.triangles = originalMeshes[i].sharedMesh.triangles;
-                targetMeshes[i].sharedMesh.tangents = originalMeshes[i].sharedMesh.tangents;
-                targetMeshes[i].sharedMesh.bounds = originalMeshes[i].sharedMesh.bounds;
+                resultingMeshes[i] = combineMeshesHelper(targets, i);
+            }
+
+            GameObject[] finalSegments = new GameObject[meshCount];
+            for (int i = 0; i < meshCount; i++)
+            {
+                finalSegments[i] = Instantiate(targets[0]);
+                finalSegments[i].transform.parent = this.transform;
+                finalSegments[i].GetComponent<MeshFilter>().sharedMesh = new Mesh();
+                finalSegments[i].transform.position = new Vector3(0, 0, 0);
+                finalSegments[i].GetComponent<MeshFilter>().sharedMesh.subMeshCount = 3;
+
+                finalSegments[i].GetComponent<MeshFilter>().sharedMesh = resultingMeshes[i];
+                finalSegments[i].GetComponent<MeshFilter>().sharedMesh.RecalculateBounds();
+                finalSegments[i].GetComponent<MeshFilter>().sharedMesh.RecalculateNormals();
+                finalSegments[i].GetComponent<MeshFilter>().sharedMesh.RecalculateTangents();
+                finalSegments[i].GetComponent<MeshRenderer>().sharedMaterials = targets[0].GetComponent<MeshRenderer>().sharedMaterials;
+            }
+
+            for (int i = 0; i < targets.Length; i++)
+            {
+                DestroyImmediate(targets[i]);
+            }
+
+            CombineInstance[] combine = new CombineInstance[meshCount];
+
+            for (int i = 0; i < meshCount; i++)
+            {
+                combine[i].mesh = finalSegments[i].GetComponent<MeshFilter>().sharedMesh;
+                combine[i].transform = finalSegments[i].transform.localToWorldMatrix;
+            }
+
+            GameObject endRoad = new GameObject();
+            endRoad.AddComponent<MeshFilter>();
+            endRoad.AddComponent<MeshRenderer>();
+
+            endRoad.transform.parent = this.transform;
+            endRoad.GetComponent<MeshFilter>().sharedMesh = new Mesh();
+            endRoad.GetComponent<MeshFilter>().sharedMesh.CombineMeshes(combine, false);
+
+            endRoad.GetComponent<MeshRenderer>().sharedMaterials = finalSegments[0].GetComponent<MeshRenderer>().sharedMaterials;
+            endRoad.transform.name = "Road";
+
+            for (int i = 0; i < meshCount; i++)
+            {
+                DestroyImmediate(finalSegments[i]);
             }
         }
 
-        private void combineMesh(GameObject target, GameObject original)
+        private Mesh combineMeshesHelper(GameObject[] targets, int index)
         {
-            MeshFilter[] targetMeshes = target.GetComponentsInChildren<MeshFilter>();
-            MeshFilter[] originalMeshes = original.GetComponentsInChildren<MeshFilter>();
-            var targetMesh = target.GetComponent<MeshFilter>();
-            var originalMesh = original.GetComponent<MeshFilter>();
-            
-            int tmCount = target.GetComponent<MeshFilter>().sharedMesh.subMeshCount;
-            int omCount = original.GetComponent<MeshFilter>().sharedMesh.subMeshCount;
-            
-            if(false)
+            CombineInstance[] combine = new CombineInstance[targets.Length];
+            for (int i = targets.Length - 1; i >= 0; i--)
             {
-                CombineInstance[] combine = new CombineInstance[tmCount + omCount];
-                
-                for (int i = 0; i < tmCount; i++)
+                combine[i].mesh = targets[i].GetComponent<MeshFilter>().sharedMesh;
+                combine[i].transform = targets[i].transform.localToWorldMatrix;
+                combine[i].subMeshIndex = index;
+            }
+
+            Mesh returnMesh = new Mesh();
+            returnMesh.CombineMeshes(combine);
+            return returnMesh;
+        }
+
+        private void mapTerrainToRoad(GameObject Road)
+        {
+            var ter = terrain.GetComponent<UnityEngine.Terrain>();
+            if (backupData == null)
+            {
+                backupData = ter.terrainData;
+            }
+
+            var terrainData = backupData;
+            var terrainSize = terrainData.size;
+            var terrainHeight = terrainData.heightmapResolution;
+            var terrainWidth = terrainData.heightmapResolution;
+            var terrainHeightData = terrainData.GetHeights(0, 0, terrainWidth, terrainHeight);
+
+            var mesh = Road.GetComponent<MeshFilter>().sharedMesh;
+            var vertices = mesh.vertices;
+
+            for (var i = 0; i < vertices.Length; i++)
+            {
+                var vertex = vertices[i];
+                var localVertex = Road.transform.TransformPoint(vertex);
+                var terrainLoc = terrain.transform.InverseTransformPoint(localVertex);
+                var x = (int)((terrainLoc.x / terrainSize.x) * terrainWidth);
+                var z = (int)((terrainLoc.z / terrainSize.z) * terrainHeight);
+                if (x >= 0 && x < terrainWidth && z >= 0 && z < terrainHeight)
                 {
-                    print(i);
-                    combine[i * 2].mesh = targetMeshes[i].sharedMesh;
-                    combine[i * 2].transform = targetMeshes[i].transform.localToWorldMatrix;
-                    combine[i * 2].subMeshIndex = 0;
-                    
-                    combine[i * 2 + 1].mesh = originalMeshes[i].sharedMesh;
-                    combine[i * 2 + 1].transform = originalMeshes[i].transform.localToWorldMatrix;
-                    combine[i * 2 + 1].subMeshIndex = 0;
+                    terrainHeightData[z, x] = terrainLoc.y / terrainSize.y;
                 }
-
-                targetMesh.sharedMesh = new Mesh();
-                targetMesh.sharedMesh.CombineMeshes(combine);
             }
-            else { 
-                CombineInstance[] combine = new CombineInstance[2];
-
-                combine[0].mesh = targetMesh.sharedMesh;
-                combine[0].transform = targetMesh.transform.localToWorldMatrix;
-
-                combine[1].mesh = originalMesh.sharedMesh;
-                combine[1].transform = originalMesh.transform.localToWorldMatrix;
-
-                targetMesh.sharedMesh = new Mesh();
-                targetMesh.sharedMesh.CombineMeshes(combine);
-            }
+            ter.terrainData.SetHeights(0, 0, terrainHeightData);
         }
     }
 }
