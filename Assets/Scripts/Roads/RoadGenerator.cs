@@ -224,6 +224,9 @@ namespace Roads
             }
 
             endRoad.GetComponent<MeshFilter>().sharedMesh.uv = uvs;
+            
+            //TODO: do this right/better?
+            endRoad.AddComponent<MeshCollider>().sharedMesh = endRoad.GetComponent<Mesh>();
 
             mapTerrainToRoad(endRoad);
         }

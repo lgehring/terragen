@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using Roads;
 using Terrain;
 using UnityEditor;
 using UnityEngine;
@@ -30,6 +31,7 @@ namespace Ecosystem
         private int[,][] _plantBlockedZones; //TODO: make it possible to add entries from outside
         private Plant[,] _plantsMatrix;
         private TerrainCollider _terrainCollider;
+        private MeshCollider _roadCollider;
 
         // Awake is called when the script instance is being loaded
         private void Awake()
@@ -38,6 +40,9 @@ namespace Ecosystem
             plantPool = GetComponent<PlantPool>();
             terrain = FindObjectOfType<UnityEngine.Terrain>();
             _terrainCollider = terrain.GetComponent<TerrainCollider>();
+            
+            // Get road collider TODO: access correct
+            _roadCollider = GameObject.Find("Road").GetComponent<MeshCollider>();
 
             // Redefine bounds
             var ecoSize = terrain.terrainData.size.x; // in meters
@@ -351,28 +356,33 @@ namespace Ecosystem
             var height = 0f;
             var normal = Vector3.zero;
             var ray = new Ray(new Vector3(position.x, maxHeight, position.y), Vector3.down);
+            
+            // Do not place plants on roads
+            if (_roadCollider.Raycast(ray, out _, maxHeight))
+                return (height, normal);
 
-            if (!_terrainCollider.Raycast(ray, out var hit, maxHeight)) return (height, normal);
+            if (!_terrainCollider.Raycast(ray, out var hit, maxHeight))
+                return (height, normal);
             height = hit.point.y;
             normal = hit.normal;
 
-            // // VISUAL DEBUG RAYCAST
-            // var angleDegree = Vector3.Angle(Vector3.up, normal);
-            // var anglePercent = Mathf.Tan(angleDegree * Mathf.Deg2Rad) * 100;
-            // var color = Color.blue;
-            // if (anglePercent > 200)
-            // {
-            //     color = Color.red;
-            // }
-            // else if (anglePercent > 100)
-            // {
-            //     color = Color.yellow;
-            // }
-            // else if (anglePercent > 0)
-            // {
-            //     color = Color.green;
-            // }
-            // Debug.DrawRay(hit.point, hit.normal, color, 100f);
+            // VISUAL DEBUG RAYCAST
+            var angleDegree = Vector3.Angle(Vector3.up, normal);
+            var anglePercent = Mathf.Tan(angleDegree * Mathf.Deg2Rad) * 100;
+            var color = Color.blue;
+            if (anglePercent > 200)
+            {
+                color = Color.red;
+            }
+            else if (anglePercent > 100)
+            {
+                color = Color.yellow;
+            }
+            else if (anglePercent > 0)
+            {
+                color = Color.green;
+            }
+            Debug.DrawRay(hit.point, hit.normal, color, 100f);
 
             return (height, normal);
         }
