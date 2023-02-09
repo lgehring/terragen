@@ -40,6 +40,8 @@ namespace Terrain
 
         public int imageSmoothingFactor = 3;
 
+        private float[,] backupHeights;
+
         private void OnValidate()
         {
             if (lacunarity < 1)
@@ -87,6 +89,7 @@ namespace Terrain
                 terrainData.SetHeights(0, 0, heights);
                 terrain.GetComponent<TerrainCollider>().terrainData = terrainData;
                 terrain.transform.position = new Vector3(-terrainData.size.x / 2, 0, -terrainData.size.z / 2);
+                backupHeights = heights;
             }
         }
 
@@ -96,6 +99,11 @@ namespace Terrain
                 lacunarity, offset, warpingStrength);
 
             return heightArray;
+        }
+
+        public float[,] GetBackupHeights()
+        {
+            return backupHeights;
         }
     }
 }

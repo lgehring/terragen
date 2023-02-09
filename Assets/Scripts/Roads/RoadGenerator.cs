@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Terrain;
 using Unity.VisualScripting;
 using UnityEditor;
 using UnityEngine;
@@ -15,8 +16,9 @@ namespace Roads
     public class RoadGenerator : MonoBehaviour
     {
         public Transform map;
+        public TerrainController TerrainController;
         public GameObject terrain;
-        private TerrainData backupData;
+        private float[,] backupHeights;
         public int innerRadiusForAStar;
         public int outerRadiusForAStar;
         public int gridSizeInMeters;
@@ -47,6 +49,7 @@ namespace Roads
                 throw new ArgumentException("The map is null");
             if (terrain == null) 
                 throw new ArgumentException("The terrain is null");
+            terrain.GetComponent<UnityEngine.Terrain>().terrainData.SetHeights(0, 0, TerrainController.GetBackupHeights());
 
             startingPoint = GetComponentsInChildren<Transform>()[1].gameObject;
             endPoint = GetComponentsInChildren<Transform>()[2].gameObject;
@@ -197,9 +200,10 @@ namespace Roads
         private void generateRoadMesh(List<Vector3> points, List<Vector3> normals, List<Vector3> tangents)
         {
             var segments = new RoadSegments(points, normals);
-
+            
             GameObject roadMesh = PrefabUtility.LoadPrefabContents("Assets/Resources/StraightRoad.prefab");
             GameObject[] roadSegments = new GameObject[points.Count - 1];
+            Vector3[] path = new Vector3[(points.Count - 1) * 2];
 
             for (var i = 0; i < points.Count - 1; i++)
             {
@@ -209,7 +213,7 @@ namespace Roads
 
                 roadSegments[i].GetComponent<MeshFilter>().sharedMesh = new Mesh();
                 roadSegments[i].GetComponent<MeshFilter>().sharedMesh = (Mesh)Instantiate(roadMesh.GetComponent<MeshFilter>().sharedMesh);
-                DeformMesh(roadSegments[i], points[i], points[i + 1], tangents[i], tangents[i+1], normals[i], normals[i+1]);
+                (path[i*2], path[i*2 + 1]) = DeformMesh(roadSegments[i], points[i], points[i + 1], tangents[i], tangents[i+1], normals[i], normals[i+1]);
             }
 
             combineMeshes(roadSegments);
@@ -225,16 +229,21 @@ namespace Roads
 
             endRoad.GetComponent<MeshFilter>().sharedMesh.uv = uvs;
 
-            mapTerrainToRoad(endRoad);
+            mapTerrainToRoad(path, endRoad.GetComponent<MeshFilter>().sharedMesh);
         }
 
-        private void DeformMesh(GameObject roadSegment, Vector3 start, Vector3 end, Vector3 tangentStart, Vector3 tangentEnd, Vector3 normalStart, Vector3 normalEnd)
+        private (Vector3, Vector3) DeformMesh(GameObject roadSegment, Vector3 start, Vector3 end, Vector3 tangentStart, Vector3 tangentEnd, Vector3 normalStart, Vector3 normalEnd)
         {
             var mesh = roadSegment.GetComponent<MeshFilter>().sharedMesh;
             var meshTransform = roadSegment.transform;
             var vertices = mesh.vertices;
             var normals = mesh.normals;
             var uvs = mesh.uv;
+
+            float leftMostPoint = 0;
+            float rightMostPoint = 0;
+            int leftIndex = 0;
+            int rightIndex = 0;
 
             Quaternion startRotation = Quaternion.LookRotation(tangentStart, normalStart);
             Quaternion endRotation = Quaternion.LookRotation(tangentEnd, normalEnd);
@@ -244,6 +253,16 @@ namespace Roads
                 var vertex = vertices[i];
                 if (vertex.z < 0f)
                 {
+                    if (vertex.x < leftMostPoint)
+                    {
+                        leftMostPoint = vertex.x;
+                        leftIndex = i;
+                    }
+                    if (vertex.x > rightMostPoint)
+                    {
+                        rightMostPoint = vertex.x;
+                        rightIndex = i;
+                    }
                     
                     vertices[i] = meshTransform.TransformPoint(vertex);
                     vertices[i] = start;
@@ -267,6 +286,11 @@ namespace Roads
             mesh.vertices = vertices;
             mesh.normals = normals;
             mesh.uv = uvs;
+
+            Vector3 leftMostVector = meshTransform.TransformPoint(vertices[leftIndex]);
+            Vector3 rightMostVector = meshTransform.TransformPoint(vertices[rightIndex]);
+
+            return (leftMostVector, rightMostVector);
         }
 
         private void combineMeshes(GameObject[] targets)
@@ -318,6 +342,10 @@ namespace Roads
             endRoad.GetComponent<MeshRenderer>().sharedMaterials = finalSegments[0].GetComponent<MeshRenderer>().sharedMaterials;
             endRoad.transform.name = "Road";
 
+            endRoad.GetComponent<MeshFilter>().sharedMesh.RecalculateBounds();
+            endRoad.GetComponent<MeshFilter>().sharedMesh.RecalculateNormals();
+            endRoad.GetComponent<MeshFilter>().sharedMesh.RecalculateTangents();
+
             for (int i = 0; i < meshCount; i++)
             {
                 DestroyImmediate(finalSegments[i]);
@@ -339,36 +367,137 @@ namespace Roads
             return returnMesh;
         }
 
-        private void mapTerrainToRoad(GameObject Road)
+        private void mapTerrainToRoad(Vector3[] path, Mesh roadMesh)
         {
             var ter = terrain.GetComponent<UnityEngine.Terrain>();
-            if (backupData == null)
-            {
-                backupData = ter.terrainData;
-            }
-
-            var terrainData = backupData;
+            var terrainData = ter.terrainData;
             var terrainSize = terrainData.size;
             var terrainHeight = terrainData.heightmapResolution;
             var terrainWidth = terrainData.heightmapResolution;
             var terrainHeightData = terrainData.GetHeights(0, 0, terrainWidth, terrainHeight);
+            int radius = 10;
+            var epsilon = 2f;
 
-            var mesh = Road.GetComponent<MeshFilter>().sharedMesh;
-            var vertices = mesh.vertices;
+            // Adjust the terrain for the first points in the path
+            var prevLeft = terrain.transform.InverseTransformPoint(path[0]);
+            var prevRight = terrain.transform.InverseTransformPoint(path[1]);
 
-            for (var i = 0; i < vertices.Length; i++)
+            var prevLeft2D = new Vector2(prevLeft.x, prevLeft.z);
+            var prevRight2D = new Vector2(prevRight.x, prevRight.z);
+
+            // Create a float array that checks if terrain was already adjusted
+            var terrainAdjusted = new bool[terrainWidth, terrainHeight];
+
+            for (var i = 1; i < path.Length/2; i++)
             {
-                var vertex = vertices[i];
-                var localVertex = Road.transform.TransformPoint(vertex);
-                var terrainLoc = terrain.transform.InverseTransformPoint(localVertex);
-                var x = (int)((terrainLoc.x / terrainSize.x) * terrainWidth);
-                var z = (int)((terrainLoc.z / terrainSize.z) * terrainHeight);
-                if (x >= 0 && x < terrainWidth && z >= 0 && z < terrainHeight)
+                var left = terrain.transform.InverseTransformPoint(path[i * 2]);
+                var right = terrain.transform.InverseTransformPoint(path[i * 2 + 1]);
+
+                var maxX = (int)Mathf.Ceil(Mathf.Max(left.x, right.x, prevLeft.x, prevRight.x)) + radius;
+                var minX = (int)Mathf.Floor(Mathf.Min(left.x, right.x, prevLeft.x, prevRight.x)) - radius;
+                var maxZ = (int)Mathf.Ceil(Mathf.Max(left.z, right.z, prevLeft.z, prevRight.z)) + radius;
+                var minZ = (int)Mathf.Floor(Mathf.Min(left.z, right.z, prevLeft.z, prevRight.z)) - radius;
+
+                // Transform to terrain coordinates
+                maxX = (int)((maxX / terrainSize.x) * terrainWidth);
+                minX = (int)((minX / terrainSize.x) * terrainWidth);
+                maxZ = (int)((maxZ / terrainSize.z) * terrainHeight);
+                minZ = (int)((minZ / terrainSize.z) * terrainHeight);
+
+                var left2D = new Vector2(left.x, left.z);
+                var right2D = new Vector2(right.x, right.z);
+
+                // Creating a Triangle from most leftX to prevLeftX to prevRightX and from leftX to prevRightX to rightX
+                // and then adjusting the terrain height for each point in the triangle
+                var leftToPrevLeft = prevLeft2D - left2D;
+                var leftToPrevRight = prevRight2D - left2D;
+                var leftToRight = right2D - left2D;
+
+                var areaOne = CalcDetTriangle2D(left, prevLeft, prevRight);
+                var areaTwo = CalcDetTriangle2D(left, prevRight, right);
+
+                var averageHeight = (left.y + prevLeft.y + right.y + prevRight.y) / 4;
+                var maxDist = new Vector2(maxX - minX, maxZ - minZ).magnitude;
+
+                for (int j = minX; j <= maxX; j++)
                 {
-                    terrainHeightData[z, x] = terrainLoc.y / terrainSize.y;
+                    for(int k = minZ; k <= maxZ; k++)
+                    {
+                        var worldX = (int)(((float)j / terrainWidth) * terrainSize.x);
+                        var worldZ = (int)(((float)k / terrainHeight) * terrainSize.z);
+                        for (int wigX = -1; wigX <= 1; wigX++)
+                        {
+                            for (int wigZ = -1; wigZ <= 1; wigZ++)
+                            {
+                                var point = new Vector2(worldX + wigX, worldZ + wigZ);
+
+                                var Bary1 = CalcBary1(prevLeft, prevRight, point)/ areaOne;
+                                if (Bary1 <= 1f && Bary1 >= 0f)
+                                {
+                                    var Bary2 = CalcBary2(left, prevRight, point) / areaOne;
+                                    if (Bary2 <= 1f && Bary1 + Bary2 <= 1f && Bary2 >= 0f)
+                                    {
+                                        var Bary3 = 1 - Bary1 - Bary2;
+                                        var y = Bary1 * left.y + Bary2 * prevLeft.y + Bary3 * prevRight.y;
+
+                                        terrainHeightData[k, j] = (y - epsilon) / terrainSize.y;
+                                        terrainAdjusted[k, j] = true;
+                                        break;
+                                    }
+                                }
+                                else
+                                {
+                                    var Bary4 = CalcBary1(prevRight, right, point) / areaTwo;
+                                    if (Bary4 <= 1f && Bary4 >= 0f)
+                                    {
+                                        var Bary5 = CalcBary2(left, right, point) / areaTwo;
+                                        if (Bary5 <= 1f && Bary4 + Bary5 <= 1f && Bary5 >= 0f)
+                                        {
+                                            var Bary6 = 1 - Bary5 - Bary4;
+                                            var y = Bary4 * left.y + Bary5 * prevRight.y + Bary6 * right.y;
+
+                                            terrainHeightData[k, j] = (y - epsilon) / terrainSize.y;
+                                            terrainAdjusted[k, j] = true;
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        if (!terrainAdjusted[k, j])
+                        {
+                            var curHeight = terrainHeightData[k, j];
+
+                            var distX = Mathf.Min(j - minX, maxX - j);
+                            var distZ = Mathf.Min(k - minZ, maxZ - k);
+                            var dist = Mathf.Min(distX, distZ);
+                            var weight = dist / maxDist;
+
+                            terrainHeightData[k, j] = Mathf.Lerp(curHeight, (averageHeight - epsilon) / terrainSize.y, dist / maxDist);
+                        }
+                    }
                 }
+                prevLeft = left;
+                prevRight = right;
+                prevLeft2D = left2D;
+                prevRight2D = right2D;
             }
             ter.terrainData.SetHeights(0, 0, terrainHeightData);
+        }
+            
+        private float CalcDetTriangle2D(Vector3 firstVec, Vector3 secondVec, Vector3 thirdVec)
+        {
+            return (secondVec.z - thirdVec.z) * (firstVec.x - thirdVec.x) + (thirdVec.x - secondVec.x) * (firstVec.z - thirdVec.z);
+        }
+
+        private float CalcBary1(Vector3 secondVec, Vector3 thirdVec, Vector2 point)
+        {
+            return (secondVec.z - thirdVec.z) * (point.x - thirdVec.x) + (thirdVec.x - secondVec.x) * (point.y - thirdVec.z);
+        }
+
+        private float CalcBary2(Vector3 firstVec, Vector3 thirdVec, Vector2 point)
+        {
+            return (thirdVec.z - firstVec.z) * (point.x - thirdVec.x) + (firstVec.x - thirdVec.x) * (point.y - thirdVec.z);
         }
     }
 }
