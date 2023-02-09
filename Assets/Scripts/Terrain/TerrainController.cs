@@ -1,5 +1,7 @@
 using System;
+using System.Security.Cryptography;
 using UnityEngine;
+using UnityEngine.Rendering;
 
 namespace Terrain
 {
@@ -40,14 +42,31 @@ namespace Terrain
 
         public int imageSmoothingFactor = 6;
 
+        public TerrainTextureData terrainTextureData;
+        
         private float[,] backupHeights;
 
         private void OnValidate()
         {
+            if (terrainTextureData != null)
+            {
+                terrainTextureData.OnValuesUpdated -= onValuesUpdated;
+                terrainTextureData.OnValuesUpdated += onValuesUpdated;
+            }
             if (lacunarity < 1)
                 lacunarity = 1;
             if (octaves < 0)
                 octaves = 0;
+        }
+        
+        void onValuesUpdated()
+        {
+            var terrain = GameObject.Find("Terrain");
+            var material = terrain.GetComponent<UnityEngine.Terrain>().materialTemplate;
+            if (material != null && terrainTextureData != null)
+                terrainTextureData.ApplyToMaterial(material);
+            terrain.GetComponent<UnityEngine.Terrain>().materialTemplate = null;
+            terrain.GetComponent<UnityEngine.Terrain>().materialTemplate = material;
         }
 
         public void DrawMapInEditor()
@@ -88,6 +107,47 @@ namespace Terrain
                 terrainData.size = new Vector3(mapSize, depthRange, mapSize);
                 terrainData.SetHeights(0, 0, heights);
                 terrain.GetComponent<TerrainCollider>().terrainData = terrainData;
+
+                var minHeight = float.MaxValue;
+                var maxHeight = float.MinValue;
+                
+                for (int i = 0; i < heights.GetLength(0); i++)
+                {
+                    for (int j = 0; j < heights.GetLength(1); j++)
+                    {
+                        var val = heights[i, j];
+                        if (val < minHeight)
+                        {
+                            minHeight = val;
+                        }
+                        if (val > maxHeight)
+                        {
+                            maxHeight = val;
+                        }
+                    }
+                }
+
+                minHeight *= terrainData.size.y;
+                maxHeight *= terrainData.size.y;
+
+                Material material; 
+                if (terrain.GetComponent<UnityEngine.Terrain>().materialTemplate == null)
+                {
+                    material = Resources.Load<Material>("Materials/TerrainMaterial");
+                    material.name = "_TerrainMaterial";
+                }
+                else
+                {
+                    material = terrain.GetComponent<UnityEngine.Terrain>().materialTemplate;
+                    material.name = "_TerrainMaterial";
+                    terrain.GetComponent<UnityEngine.Terrain>().materialTemplate = null;
+                }
+
+                terrainTextureData.UpdateMeshHeights(material, minHeight, maxHeight);
+                // material.SetFloat("minHeight", minHeight);
+                // material.SetFloat("maxHeight", maxHeight);
+                terrain.GetComponent<UnityEngine.Terrain>().materialTemplate = material;
+                
                 terrain.transform.position = new Vector3(-terrainData.size.x / 2, 0, -terrainData.size.z / 2);
                 backupHeights = heights;
             }

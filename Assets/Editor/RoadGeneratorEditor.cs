@@ -18,7 +18,7 @@ namespace Editor
             }
 
             // Creats a button that say generate and generates a noise map texture if the button is pressed
-            if (GUILayout.Button("Generate")) roadGen.drawRoadMesh();
+            if (GUILayout.Button("Generate")) roadGen.DrawRoadMesh();
         }
     }
 }

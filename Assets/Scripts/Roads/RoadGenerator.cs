@@ -5,6 +5,7 @@ using Unity.VisualScripting;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.Rendering;
+using UnityEngine.Serialization;
 using UnityEngine.UIElements;
 using static UnityEngine.GraphicsBuffer;
 
@@ -16,15 +17,14 @@ namespace Roads
     public class RoadGenerator : MonoBehaviour
     {
         public Transform map;
-        public TerrainController TerrainController;
+        [FormerlySerializedAs("TerrainController")] public TerrainController terrainController;
         public GameObject terrain;
-        private float[,] backupHeights;
         public int innerRadiusForAStar;
         public int outerRadiusForAStar;
         public int gridSizeInMeters;
         public int splineResolution;
-        private GameObject endPoint;
-        private GameObject startingPoint;
+        private GameObject _endPoint;
+        private GameObject _startingPoint;
 
         private void OnValidate()
         {
@@ -39,20 +39,21 @@ namespace Roads
             if (splineResolution > 100) splineResolution = 100;
         }
 
+        // ReSharper disable Unity.PerformanceAnalysis
         /// <summary>
         ///     Creates a spline extrapolates a road mesh onto it and adds it to the scene
         /// </summary>
         /// <exception cref="ArgumentException"> Throws an exception if the road has to many nodes </exception>
-        public void drawRoadMesh()
+        public void DrawRoadMesh()
         {
             if (map == null) 
                 throw new ArgumentException("The map is null");
             if (terrain == null) 
                 throw new ArgumentException("The terrain is null");
-            terrain.GetComponent<UnityEngine.Terrain>().terrainData.SetHeights(0, 0, TerrainController.GetBackupHeights());
+            terrain.GetComponent<UnityEngine.Terrain>().terrainData.SetHeights(0, 0, terrainController.GetBackupHeights());
 
-            startingPoint = GetComponentsInChildren<Transform>()[1].gameObject;
-            endPoint = GetComponentsInChildren<Transform>()[2].gameObject;
+            _startingPoint = GetComponentsInChildren<Transform>()[1].gameObject;
+            _endPoint = GetComponentsInChildren<Transform>()[2].gameObject;
 
             for (var i = GetComponentsInChildren<Transform>().Length - 1; i > 2; i--)
             {
@@ -61,12 +62,15 @@ namespace Roads
             }
 
             var bounds = (int)Mathf.Abs(map.localScale.x * 10);
-            var offset = new Vector2Int((int)map.position.x, (int)map.position.z);
+            var mapPosition = map.position;
+            var offset = new Vector2Int((int)mapPosition.x, (int)mapPosition.z);
+            var startPosition = _startingPoint.transform.position;
             var start = new Vector2Int(
-                ((int)startingPoint.transform.position.x + bounds / 2 - offset.x) / gridSizeInMeters,
-                ((int)startingPoint.transform.position.z + bounds / 2 - offset.y) / gridSizeInMeters);
-            var end = new Vector2Int(((int)endPoint.transform.position.x + bounds / 2 - offset.x) / gridSizeInMeters,
-                ((int)endPoint.transform.position.z + bounds / 2 - offset.y) / gridSizeInMeters);
+                ((int)startPosition.x + bounds / 2 - offset.x) / gridSizeInMeters,
+                ((int)startPosition.z + bounds / 2 - offset.y) / gridSizeInMeters);
+            var endPosition = _endPoint.transform.position;
+            var end = new Vector2Int(((int)endPosition.x + bounds / 2 - offset.x) / gridSizeInMeters,
+                ((int)endPosition.z + bounds / 2 - offset.y) / gridSizeInMeters);
 
             if (Mathf.Min(end.x, end.y, start.x, start.y) < -bounds / 2 ||
                 Mathf.Max(end.x, end.y, start.x, start.y) > bounds / 2)
@@ -142,7 +146,7 @@ namespace Roads
             {
                 tangents.Add(points[i + 2] - points[i]);
             }
-            tangents.Add(points[points.Count - 1] - points[points.Count - 2]);
+            tangents.Add(points[^1] - points[^2]);
             if (splineResolution == 1)
             {
                 return (points, normals, tangents);
@@ -412,10 +416,6 @@ namespace Roads
 
                 // Creating a Triangle from most leftX to prevLeftX to prevRightX and from leftX to prevRightX to rightX
                 // and then adjusting the terrain height for each point in the triangle
-                var leftToPrevLeft = prevLeft2D - left2D;
-                var leftToPrevRight = prevRight2D - left2D;
-                var leftToRight = right2D - left2D;
-
                 var areaOne = CalcDetTriangle2D(left, prevLeft, prevRight);
                 var areaTwo = CalcDetTriangle2D(left, prevRight, right);
 
