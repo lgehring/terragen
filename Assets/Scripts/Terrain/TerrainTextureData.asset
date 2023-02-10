@@ -12,12 +12,41 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 8263cf67e7bfeeb4db9679ba85d651a2, type: 3}
   m_Name: TerrainTextureData
   m_EditorClassIdentifier: 
-  autoUpdate: 0
-  baseColors:
-  - {r: 1, g: 0.008883749, b: 0, a: 0}
-  - {r: 0, g: 0.10394716, b: 1, a: 0}
-  - {r: 0, g: 0.10394716, b: 1, a: 0}
-  baseStartHeights:
-  - 0
-  - 0.275
-  - 0.412
+  autoUpdate: 1
+  layers:
+  - texture: {fileID: 2800000, guid: a15e7f0bfc342c04da6620f0ceb6e278, type: 3}
+    tint: {r: 0, g: 0.43311167, b: 1, a: 0}
+    tintStrength: 0
+    StartHeight: 0
+    blendStrength: 0.111
+    textureScale: 100
+  - texture: {fileID: 2800000, guid: 670782c5011d9ee43a44d27c78a3c027, type: 3}
+    tint: {r: 0.8679245, g: 0.8097824, b: 0.09416164, a: 0}
+    tintStrength: 0
+    StartHeight: 0.095
+    blendStrength: 0.009
+    textureScale: 100
+  - texture: {fileID: 2800000, guid: 2c59970208c078144859cf92e9c27270, type: 3}
+    tint: {r: 0.25256497, g: 0.8396226, b: 0.20198467, a: 0}
+    tintStrength: 0
+    StartHeight: 0.146
+    blendStrength: 0.043
+    textureScale: 100
+  - texture: {fileID: 2800000, guid: 45abd2b966db96141b2e4ca0b501d42f, type: 3}
+    tint: {r: 0.7169812, g: 0.36751047, b: 0.057493784, a: 0}
+    tintStrength: 0
+    StartHeight: 0.257
+    blendStrength: 0.154
+    textureScale: 100
+  - texture: {fileID: 2800000, guid: 61c3cb04d7258654ab361a820f91884f, type: 3}
+    tint: {r: 0.1981132, g: 0.102679804, b: 0, a: 0}
+    tintStrength: 0
+    StartHeight: 0.53
+    blendStrength: 0.188
+    textureScale: 100
+  - texture: {fileID: 2800000, guid: 5a01a86d0f6b73f498e000a7a8407fa0, type: 3}
+    tint: {r: 1, g: 1, b: 1, a: 0}
+    tintStrength: 0
+    StartHeight: 0.718
+    blendStrength: 0.043
+    textureScale: 100
