@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using Roads;
 using Terrain;
 using UnityEditor;
 using UnityEngine;
@@ -30,8 +29,9 @@ namespace Ecosystem
         public PlantPool plantPool;
         private int[,][] _plantBlockedZones; //TODO: make it possible to add entries from outside
         private Plant[,] _plantsMatrix;
-        private TerrainCollider _terrainCollider;
         private MeshCollider _roadCollider;
+        private TerrainCollider _terrainCollider;
+        private float _waterHeight;
 
         // Awake is called when the script instance is being loaded
         private void Awake()
@@ -40,9 +40,13 @@ namespace Ecosystem
             plantPool = GetComponent<PlantPool>();
             terrain = FindObjectOfType<UnityEngine.Terrain>();
             _terrainCollider = terrain.GetComponent<TerrainCollider>();
-            
+
             // Get road collider TODO: access correct
             _roadCollider = GameObject.Find("Road").GetComponent<MeshCollider>();
+
+            // Get water height
+            _waterHeight = GameObject.Find("TerrainController").GetComponent<TerrainController>().terrainTextureData
+                .layers[1].startHeight;
 
             // Redefine bounds
             var ecoSize = terrain.terrainData.size.x; // in meters
@@ -51,12 +55,6 @@ namespace Ecosystem
 
             // Initialize plantMatrix
             _plantsMatrix = new Plant[(int)bounds.width, (int)bounds.height]; // decimeter resolution
-            
-            // Place details
-            PlaceGrass();
-            PlaceRandomDetails(100, 1); //rocks
-            PlaceRandomDetails(250, 2); //branches
-            PlaceRandomDetails(10, 3); //dead tree
         }
 
         // Performs full single step of the ecosystem simulation
@@ -159,22 +157,21 @@ namespace Ecosystem
             var heightmapFolder = terrainController.heightmapFolder;
             var realImageWidthInM = terrainController.realImageWidthInM;
             var path = heightmapFolder + "block_grass" + ".png";
-            var grassBlockedZones = new bool[(int) bounds.width, (int) bounds.height];
-            if (File.Exists(path))
-            {
+            var grassBlockedZones = new bool[(int)bounds.width, (int)bounds.height];
+            if (File.Exists(path) && terrainController.useVegetationBlocking)
                 grassBlockedZones = BlockedPlantReader.BlockedArrayFromImage(
                     path, realImageWidthInM, (int)bounds.width);
-            }
-            
+
             var grassPositions = new List<Vector2Int>();
             for (var i = 0; i < grassBlockedZones.GetLength(0); i++)
-                for (var j = 0; j < grassBlockedZones.GetLength(1); j++)
-                    if (!grassBlockedZones[i, j])
-                    {
-                        grassPositions.Add(new Vector2Int(i, j));
-                        grassPositions.Add(new Vector2Int(i, j));
-                    }
-            
+            for (var j = 0; j < grassBlockedZones.GetLength(1); j++)
+            {
+                // Check if manually blocked
+                if (grassBlockedZones[i, j]) continue;
+                grassPositions.Add(new Vector2Int(i, j));
+                grassPositions.Add(new Vector2Int(i, j));
+            }
+
             PlaceDetails(grassPositions, 0);
         }
 
@@ -265,7 +262,8 @@ namespace Ecosystem
             if (!(heightConstraints[0] <= raycastResult.height) ||
                 !(heightConstraints[1] > raycastResult.height) ||
                 !(slopeConstraints[0] <= slopePercent) ||
-                !(slopeConstraints[1] > slopePercent)) return;
+                !(slopeConstraints[1] > slopePercent) ||
+                raycastResult.height == 0) return;
 
             // Instantiate plant
             var newPos = new Vector3(worldPos.x, raycastResult.height, worldPos.y);
@@ -275,31 +273,33 @@ namespace Ecosystem
             if (renderPlants) AgeScalePlant(newPlant);
             _plantsMatrix[pos.x, pos.y] = newPlant;
         }
-        
-        private void PlaceDetails(List<Vector2Int> positions, int detailLayerIndex)
+
+        private void PlaceDetails(IEnumerable<Vector2Int> positions, int detailLayerIndex)
         {
             var terrainData = terrain.terrainData;
-            var detailMap = terrainData.GetDetailLayer(0, 0, terrainData.detailWidth, terrainData.detailHeight, detailLayerIndex);
-            var detailMapResolution = (float) terrainData.detailResolution;
+            var detailMap = terrainData.GetDetailLayer(0, 0, terrainData.detailWidth, terrainData.detailHeight,
+                detailLayerIndex);
+            var detailMapResolution = (float)terrainData.detailResolution;
             var detailMapScale = detailMapResolution / terrainData.size.x;
 
-            foreach (var pos in positions)
-            {
-                detailMap[(int) (pos.y * detailMapScale), (int) (pos.x * detailMapScale)] = 1;
-            }
+            foreach (var pos in from pos in positions
+                     let height = RaycastAtPosition(MatrixToWorld(new Vector2Int(pos.x, pos.y))).height
+                     where height > _waterHeight
+                     select pos) detailMap[(int)(pos.y * detailMapScale), (int)(pos.x * detailMapScale)] = 1;
 
             terrainData.SetDetailLayer(0, 0, detailLayerIndex, detailMap);
         }
-        
+
         private void PlaceRandomDetails(int num, int index)
         {
             var positions = new List<Vector2Int>();
             for (var i = 0; i < num; i++)
             {
-                var x = Random.Range(0, (int) bounds.width);
-                var y = Random.Range(0, (int) bounds.height);
+                var x = Random.Range(0, (int)bounds.width);
+                var y = Random.Range(0, (int)bounds.height);
                 positions.Add(new Vector2Int(x, y));
             }
+
             PlaceDetails(positions, index);
         }
 
@@ -356,7 +356,7 @@ namespace Ecosystem
             var height = 0f;
             var normal = Vector3.zero;
             var ray = new Ray(new Vector3(position.x, maxHeight, position.y), Vector3.down);
-            
+
             // Do not place plants on roads
             if (_roadCollider.Raycast(ray, out _, maxHeight))
                 return (height, normal);
@@ -366,23 +366,27 @@ namespace Ecosystem
             height = hit.point.y;
             normal = hit.normal;
 
-            // VISUAL DEBUG RAYCAST
-            var angleDegree = Vector3.Angle(Vector3.up, normal);
-            var anglePercent = Mathf.Tan(angleDegree * Mathf.Deg2Rad) * 100;
-            var color = Color.blue;
-            if (anglePercent > 200)
-            {
-                color = Color.red;
-            }
-            else if (anglePercent > 100)
-            {
-                color = Color.yellow;
-            }
-            else if (anglePercent > 0)
-            {
-                color = Color.green;
-            }
-            Debug.DrawRay(hit.point, hit.normal, color, 100f);
+            // Do not place below water level
+            if (height <= _waterHeight)
+                return (0f, Vector3.zero);
+
+            // // VISUAL DEBUG RAYCAST
+            // var angleDegree = Vector3.Angle(Vector3.up, normal);
+            // var anglePercent = Mathf.Tan(angleDegree * Mathf.Deg2Rad) * 100;
+            // var color = Color.blue;
+            // if (anglePercent > 200)
+            // {
+            //     color = Color.red;
+            // }
+            // else if (anglePercent > 100)
+            // {
+            //     color = Color.yellow;
+            // }
+            // else if (anglePercent > 0)
+            // {
+            //     color = Color.green;
+            // }
+            // Debug.DrawRay(hit.point, hit.normal, color, 100f);
 
             return (height, normal);
         }
@@ -412,10 +416,16 @@ namespace Ecosystem
 
         public void PrepareEcosystem()
         {
-            _plantBlockedZones = FindObjectOfType<TerrainController>().useImage
+            _plantBlockedZones = FindObjectOfType<TerrainController>().useVegetationBlocking
                 ? GetBlockedZones()
                 : new int[(int)bounds.width, (int)bounds.height][]; // No blocked zones
             plantPool.CreatePlantPool();
+
+            // Place details
+            PlaceGrass();
+            PlaceRandomDetails(80, 1); //rocks
+            PlaceRandomDetails(250, 2); //branches
+            PlaceRandomDetails(10, 3); //dead tree
         }
 
         public void UpdatePlantPrefabFiles()

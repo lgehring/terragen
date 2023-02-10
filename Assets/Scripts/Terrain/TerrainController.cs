@@ -41,8 +41,11 @@ namespace Terrain
         public int realImageWidthInM = 8000;
 
         public int imageSmoothingFactor = 6;
-
+        
+        // Vegetation options
         public TerrainTextureData terrainTextureData;
+
+        public bool useVegetationBlocking = true;
         
         private float[,] backupHeights;
 
@@ -107,13 +110,14 @@ namespace Terrain
                 terrainData.size = new Vector3(mapSize, depthRange, mapSize);
                 terrainData.SetHeights(0, 0, heights);
                 terrain.GetComponent<TerrainCollider>().terrainData = terrainData;
-
+                
+                //TODO: remove?
                 var minHeight = float.MaxValue;
                 var maxHeight = float.MinValue;
                 
-                for (int i = 0; i < heights.GetLength(0); i++)
+                for (var i = 0; i < heights.GetLength(0); i++)
                 {
-                    for (int j = 0; j < heights.GetLength(1); j++)
+                    for (var j = 0; j < heights.GetLength(1); j++)
                     {
                         var val = heights[i, j];
                         if (val < minHeight)
@@ -127,8 +131,8 @@ namespace Terrain
                     }
                 }
 
-                minHeight *= terrainData.size.y;
-                maxHeight *= terrainData.size.y;
+                minHeight *= terrainData.size.y; //TODO:  min = 0
+                maxHeight *= terrainData.size.y; //TODO: reevaluate
 
                 Material material; 
                 if (terrain.GetComponent<UnityEngine.Terrain>().materialTemplate == null)
@@ -144,8 +148,6 @@ namespace Terrain
                 }
 
                 terrainTextureData.UpdateMeshHeights(material, minHeight, maxHeight);
-                // material.SetFloat("minHeight", minHeight);
-                // material.SetFloat("maxHeight", maxHeight);
                 terrain.GetComponent<UnityEngine.Terrain>().materialTemplate = material;
                 
                 terrain.transform.position = new Vector3(-terrainData.size.x / 2, 0, -terrainData.size.z / 2);
