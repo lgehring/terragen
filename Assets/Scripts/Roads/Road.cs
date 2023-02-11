@@ -403,7 +403,7 @@ namespace Roads
 
         private (float height, Vector3 normal) RaycastAtPosition(Vector2 position)
         {
-            const int maxHeight = 3000; // Height "Zugspitze" in m
+            const int maxHeight = 1024; // Height "Zugspitze" in m
             var height = 0f;
             var normal = Vector3.zero;
             var ray = new Ray(new Vector3(position.x, maxHeight, position.y), Vector3.down);
@@ -459,16 +459,23 @@ namespace Roads
                 {
                     x = oldIndex % gridSize + i;
                     z = oldIndex / gridSize + j;
+
                     if (x < 0 || x >= gridSize || z < 0 || z >= gridSize) continue;
+
                     index = z * gridSize + x;
+
                     if (visited[index]) continue;
-                    //if (oldIndex == index) continue;
+
                     if (Math.Abs(i) <= innerRadius && Math.Abs(j) <= innerRadius) continue;
+
                     relativeDist = nodes[index].pos - nodes[oldIndex].pos;
                     relativeHeight = nodes[index].mapHeight - nodes[oldIndex].mapHeight;
+
                     var direction = new Vector3(relativeDist.x, relativeHeight, relativeDist.z).normalized;
+
                     roadDist = nodes[oldIndex].dist + evalSlope(direction) * relativeDist.sqrMagnitude;
                     tunnelDist = nodes[oldIndex].dist + evalTunnel(relativeHeight) * relativeDist.sqrMagnitude;
+
                     if (roadDist < nodes[index].dist && roadDist < tunnelDist)
                     {
                         nodes[index].dist = roadDist;
@@ -494,6 +501,10 @@ namespace Roads
 
             if (nodes[endingPosition.y * gridSize + endingPosition.x].predIdx == -1)
                 throw new Exception("No path found");
+
+            // Set starting and ending point to road
+            nodes[startingPosition.y * gridSize + startingPosition.x].roadType = RoadNodeType.Road;
+            nodes[endingPosition.y * gridSize + endingPosition.x].roadType = RoadNodeType.Road;
         }
 
         private float evalSlope(Vector3 dirVec)
