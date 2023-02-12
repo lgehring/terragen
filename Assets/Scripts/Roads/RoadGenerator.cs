@@ -4,6 +4,7 @@ using Terrain;
 using Unity.VisualScripting;
 using UnityEditor;
 using UnityEngine;
+using UnityEngine.Rendering;
 using UnityEngine.Serialization;
 
 namespace Roads
@@ -23,9 +24,13 @@ namespace Roads
         public int outerRadiusForAStar;
         public int gridSizeInMeters;
         public int splineResolution;
+        public bool allowBridges;
+        public bool allowTunnels;
+        public bool restrictCurvature;
         private float[,] _backupHeights;
-        private GameObject _endPoint;
-        private GameObject _startingPoint;
+        private List<GameObject> _endPoints;
+        private List<GameObject> _startingPoints;
+        private float[,] adjustedHeightMap;
 
         private void OnValidate()
         {
@@ -46,154 +51,204 @@ namespace Roads
         /// <exception cref="ArgumentException"> Throws an exception if the road has to many nodes </exception>
         public void DrawRoadMesh()
         {
+            _startingPoints.Clear();
+            _endPoints.Clear();
             if (map == null)
                 throw new ArgumentException("The map is null");
             if (terrain == null)
                 throw new ArgumentException("The terrain is null");
-            if (_backupHeights == null) _backupHeights = terrainController.GetBackupHeights();
+            _backupHeights = terrainController.GetBackupHeights();
 
             terrain.GetComponent<UnityEngine.Terrain>().terrainData.SetHeights(0, 0, _backupHeights);
+            Transform[] children;
+            children = GetComponentsInChildren<Transform>();
+            for (var i = 0; i < children.Length; i++)
+            {
+                if (children[i].gameObject.tag == "starting point")
+                    _startingPoints.Add(children[i].gameObject);
+                if (children[i].gameObject.tag == "ending point")
+                    _endPoints.Add(children[i].gameObject);
+            }
 
-            _startingPoint = GetComponentsInChildren<Transform>()[1].gameObject;
-            _endPoint = GetComponentsInChildren<Transform>()[2].gameObject;
-
-            for (var i = GetComponentsInChildren<Transform>().Length - 1; i > 2; i--)
+            for (var i = GetComponentsInChildren<Transform>().Length - 1; i > 0; i--)
             {
                 var toBeDestroyed = GetComponentsInChildren<Transform>()[i].gameObject;
+                if (toBeDestroyed.tag == "starting point" || toBeDestroyed.tag == "ending point")
+                    continue;
                 DestroyImmediate(toBeDestroyed);
             }
 
-            var bounds = (int)Mathf.Abs(map.localScale.x * 10);
-            var mapPosition = map.position;
-            var offset = new Vector2Int((int)mapPosition.x, (int)mapPosition.z);
-            var startPosition = _startingPoint.transform.position;
-            var start = new Vector2Int(
-                ((int)startPosition.x + bounds / 2 - offset.x) / gridSizeInMeters,
-                ((int)startPosition.z + bounds / 2 - offset.y) / gridSizeInMeters);
-            var endPosition = _endPoint.transform.position;
-            var end = new Vector2Int(((int)endPosition.x + bounds / 2 - offset.x) / gridSizeInMeters,
-                ((int)endPosition.z + bounds / 2 - offset.y) / gridSizeInMeters);
+            adjustedHeightMap = new float[_backupHeights.GetLength(0), _backupHeights.GetLength(1)];
 
-            if (Mathf.Min(end.x, end.y, start.x, start.y) < -bounds / 2 ||
-                Mathf.Max(end.x, end.y, start.x, start.y) > bounds / 2)
-                throw new ArgumentException("The starting or endpoint is out of bounds");
+            for (var i = 0; i < _backupHeights.GetLength(0); i++)
+            for (var j = 0; j < _backupHeights.GetLength(1); j++)
+                adjustedHeightMap[i, j] = _backupHeights[i, j];
 
-            var road = new Road(start, end, bounds, innerRadiusForAStar, outerRadiusForAStar, gridSizeInMeters, offset);
-            road.generateRoad(start, end);
-
-            var startIdx = start.x + start.y * bounds / gridSizeInMeters;
-            var endingIdx = end.x + end.y * bounds / gridSizeInMeters;
-
-            var path = new List<Vector3>();
-            var normals = new List<Vector3>();
-            var roadTypes = new List<RoadNodeType>();
-
-            var prevIdx = endingIdx;
-            var index = road.nodes[prevIdx].predIdx;
-
-            path.Add(new Vector3(road.nodes[prevIdx].pos.x, road.nodes[prevIdx].mapHeight, road.nodes[prevIdx].pos.z));
-            normals.Add(road.nodes[prevIdx].normal);
-            roadTypes.Add(road.nodes[prevIdx].roadType);
-
-            var count = 0;
-
-            while (index != startIdx)
+            for (var roadIdx = 0; roadIdx < _startingPoints.Count; roadIdx++)
             {
-                if (count > 1000) throw new ArgumentException("The road is too long");
+                var bounds = (int)Mathf.Abs(map.localScale.x * 10);
+                var mapPosition = map.position;
+                var offset = new Vector2Int((int)mapPosition.x, (int)mapPosition.z);
+                var startPosition = _startingPoints[roadIdx].transform.position;
+                var start = new Vector2Int(
+                    ((int)startPosition.x + bounds / 2 - offset.x) / gridSizeInMeters,
+                    ((int)startPosition.z + bounds / 2 - offset.y) / gridSizeInMeters);
+                var endPosition = _endPoints[roadIdx].transform.position;
+                var end = new Vector2Int(((int)endPosition.x + bounds / 2 - offset.x) / gridSizeInMeters,
+                    ((int)endPosition.z + bounds / 2 - offset.y) / gridSizeInMeters);
 
-                if (road.nodes[index].roadType == RoadNodeType.Tunnel)
+                if (Mathf.Min(end.x, end.y, start.x, start.y) < -bounds / 2 ||
+                    Mathf.Max(end.x, end.y, start.x, start.y) > bounds / 2)
+                    throw new ArgumentException("The starting or endpoint is out of bounds");
+
+                var road = new Road(start, end, bounds, innerRadiusForAStar, outerRadiusForAStar, gridSizeInMeters,
+                    offset,
+                    allowBridges, allowTunnels, restrictCurvature);
+                road.generateRoad(start, end);
+
+                var startIdx = start.x + start.y * bounds / gridSizeInMeters;
+                var endingIdx = end.x + end.y * bounds / gridSizeInMeters;
+
+                var path = new List<Vector3>();
+                var normals = new List<Vector3>();
+                var roadTypes = new List<RoadNodeType>();
+
+                var prevIdx = endingIdx;
+                var index = road.nodes[prevIdx].predIdx;
+
+                path.Add(new Vector3(road.nodes[prevIdx].pos.x, road.nodes[prevIdx].mapHeight,
+                    road.nodes[prevIdx].pos.z));
+                normals.Add(road.nodes[prevIdx].normal);
+                roadTypes.Add(road.nodes[prevIdx].roadType);
+
+                var count = 0;
+
+                while (index != startIdx)
                 {
-                    var tunnelNodes = 1;
-                    var tunnelStartIdx = index;
-                    var tunnelEndIdx = index;
-                    var tunnelIndices = new List<int>
+                    if (count > 1000) throw new ArgumentException("The road is too long");
+
+                    if (road.nodes[index].roadType == RoadNodeType.Tunnel)
                     {
-                        index
-                    };
+                        var tunnelNodes = 1;
+                        var tunnelStartIdx = index;
+                        var tunnelEndIdx = index;
+                        var tunnelIndices = new List<int>
+                        {
+                            index
+                        };
 
-                    prevIdx = index;
-                    index = road.nodes[prevIdx].predIdx;
+                        prevIdx = index;
+                        index = road.nodes[prevIdx].predIdx;
 
-                    // Ensure that the tunnel is at least 2 nodes long
-                    road.nodes[index].roadType = RoadNodeType.Tunnel;
+                        // Ensure that the tunnel is at least 2 nodes long
+                        road.nodes[index].roadType = RoadNodeType.Tunnel;
 
-                    while (road.nodes[index].roadType == RoadNodeType.Tunnel && index != startIdx)
+                        while (road.nodes[index].roadType == RoadNodeType.Tunnel && index != startIdx)
+                        {
+                            tunnelNodes++;
+                            tunnelEndIdx = index;
+                            tunnelIndices.Add(tunnelEndIdx);
+                            prevIdx = index;
+                            index = road.nodes[prevIdx].predIdx;
+                            count++;
+                        }
+
+                        var tunnelHeightDeltaPerNode =
+                            road.nodes[tunnelEndIdx].mapHeight - road.nodes[tunnelStartIdx].mapHeight;
+                        for (var i = 0; i < tunnelNodes; i++)
+                        {
+                            path.Add(new Vector3(road.nodes[tunnelIndices[i]].pos.x,
+                                road.nodes[tunnelIndices[i]].mapHeight +
+                                tunnelHeightDeltaPerNode * i / (tunnelNodes - 1),
+                                road.nodes[tunnelIndices[i]].pos.z));
+                            normals.Add(road.nodes[tunnelIndices[i]].normal);
+                            roadTypes.Add(RoadNodeType.Tunnel);
+                        }
+
+                        if (prevIdx == index) break;
+                    }
+                    else if (road.nodes[index].roadType == RoadNodeType.Bridge)
                     {
-                        tunnelNodes++;
-                        tunnelEndIdx = index;
-                        tunnelIndices.Add(tunnelEndIdx);
+                        var bridgeNodes = 1;
+                        var bridgeStartIdx = index;
+                        var bridgeEndIdx = index;
+                        var bridgeIndices = new List<int>
+                        {
+                            index
+                        };
+
+                        prevIdx = index;
+                        index = road.nodes[prevIdx].predIdx;
+
+                        // Ensure that the Bridge is at least 2 nodes long
+                        road.nodes[index].roadType = RoadNodeType.Bridge;
+
+                        while (road.nodes[index].roadType == RoadNodeType.Bridge && index != startIdx)
+                        {
+                            bridgeNodes++;
+                            bridgeEndIdx = index;
+                            bridgeIndices.Add(bridgeEndIdx);
+                            prevIdx = index;
+                            index = road.nodes[prevIdx].predIdx;
+                            count++;
+                        }
+
+                        var bridgeHeightDeltaPerNode =
+                            road.nodes[bridgeEndIdx].mapHeight - road.nodes[bridgeStartIdx].mapHeight;
+                        for (var i = 0; i < bridgeNodes; i++)
+                        {
+                            path.Add(new Vector3(road.nodes[bridgeIndices[i]].pos.x,
+                                road.nodes[bridgeStartIdx].mapHeight + bridgeHeightDeltaPerNode * i / (bridgeNodes - 1),
+                                road.nodes[bridgeIndices[i]].pos.z));
+                            normals.Add(road.nodes[bridgeIndices[i]].normal);
+                            roadTypes.Add(RoadNodeType.Bridge);
+                        }
+
+                        if (prevIdx == index) break;
+                    }
+                    else
+                    {
+                        path.Add(new Vector3(road.nodes[index].pos.x, road.nodes[index].mapHeight,
+                            road.nodes[index].pos.z));
+                        normals.Add(road.nodes[index].normal);
+                        roadTypes.Add(RoadNodeType.Road);
                         prevIdx = index;
                         index = road.nodes[prevIdx].predIdx;
                         count++;
+                        if (prevIdx == index && index != startIdx)
+                            throw new ArgumentException("There is no path between the starting and endpoint");
                     }
-
-                    var tunnelHeightDeltaPerNode =
-                        road.nodes[tunnelEndIdx].mapHeight - road.nodes[tunnelStartIdx].mapHeight;
-                    for (var i = 0; i < tunnelNodes; i++)
-                    {
-                        path.Add(new Vector3(road.nodes[tunnelIndices[i]].pos.x,
-                            road.nodes[tunnelIndices[i]].mapHeight + tunnelHeightDeltaPerNode * i / (tunnelNodes - 1),
-                            road.nodes[tunnelIndices[i]].pos.z));
-                        normals.Add(road.nodes[tunnelIndices[i]].normal);
-                        roadTypes.Add(RoadNodeType.Tunnel);
-                    }
-
-                    if (prevIdx == index) break;
                 }
-                else if (road.nodes[index].roadType == RoadNodeType.Bridge)
-                {
-                    var bridgeNodes = 1;
-                    var bridgeStartIdx = index;
-                    var bridgeEndIdx = index;
-                    var bridgeIndices = new List<int>
-                    {
-                        index
-                    };
 
-                    prevIdx = index;
-                    index = road.nodes[prevIdx].predIdx;
+                var tangents = new List<Vector3>();
 
-                    while (road.nodes[index].roadType == RoadNodeType.Tunnel && index != startIdx)
-                    {
-                        bridgeNodes++;
-                        bridgeEndIdx = index;
-                        bridgeIndices.Add(bridgeEndIdx);
-                        prevIdx = index;
-                        index = road.nodes[prevIdx].predIdx;
-                        count++;
-                    }
-
-                    var tunnelHeightDeltaPerNode =
-                        road.nodes[bridgeEndIdx].mapHeight - road.nodes[bridgeStartIdx].mapHeight;
-                    for (var i = 0; i < bridgeNodes; i++)
-                    {
-                        path.Add(new Vector3(road.nodes[bridgeIndices[i]].pos.x,
-                            road.nodes[bridgeIndices[i]].mapHeight + tunnelHeightDeltaPerNode * i / (bridgeNodes - 1),
-                            road.nodes[bridgeIndices[i]].pos.z));
-                        normals.Add(road.nodes[bridgeIndices[i]].normal);
-                        roadTypes.Add(RoadNodeType.Tunnel);
-                    }
-
-                    if (prevIdx == index) break;
-                }
-                else
-                {
-                    path.Add(new Vector3(road.nodes[index].pos.x, road.nodes[index].mapHeight,
-                        road.nodes[index].pos.z));
-                    normals.Add(road.nodes[index].normal);
-                    roadTypes.Add(RoadNodeType.Road);
-                    prevIdx = index;
-                    index = road.nodes[prevIdx].predIdx;
-                    count++;
-                    if (prevIdx == index && index != startIdx)
-                        throw new ArgumentException("There is no path between the starting and endpoint");
-                }
+                (path, normals, tangents, roadTypes) = generateSpline(path, normals, tangents, roadTypes);
+                generateRoadMesh(path, normals, tangents, roadTypes);
             }
 
-            var tangents = new List<Vector3>();
+            var roadChildren = new List<GameObject>();
+            var allChildren = GetComponentsInChildren<Transform>();
+            for (var i = 0; i < allChildren.Length; i++)
+                if (allChildren[i].gameObject.tag == "Road")
+                    roadChildren.Add(allChildren[i].GameObject());
 
-            (path, normals, tangents, roadTypes) = generateSpline(path, normals, tangents, roadTypes);
-            generateRoadMesh(path, normals, tangents, roadTypes);
+            var allRoads = roadChildren[0];
+
+            var numberOfSubMeshes = 0;
+            for (var i = 0; i < roadChildren.Count; i++)
+                numberOfSubMeshes += roadChildren[i].GetComponent<MeshFilter>().sharedMesh.subMeshCount;
+            var combine = new CombineInstance[numberOfSubMeshes];
+            var meshCount = 0;
+            for (var i = 0; i < roadChildren.Count; i++)
+            for (var j = 0; j < roadChildren[i].GetComponent<MeshFilter>().sharedMesh.subMeshCount; j++)
+            {
+                combine[meshCount].subMeshIndex = j;
+                combine[meshCount].mesh = roadChildren[i].GetComponent<MeshFilter>().sharedMesh;
+                combine[meshCount++].transform = roadChildren[i].transform.localToWorldMatrix;
+            }
+
+            allRoads.GetComponent<MeshFilter>().sharedMesh = new Mesh();
+            allRoads.GetComponent<MeshFilter>().sharedMesh.CombineMeshes(combine, false);
         }
 
         private (List<Vector3>, List<Vector3>, List<Vector3>, List<RoadNodeType>) generateSpline(List<Vector3> points,
@@ -227,24 +282,56 @@ namespace Roads
                     var tunnelCount = 0;
                     var startIdx = j;
 
-                    while (roadTypes[j] == RoadNodeType.Tunnel)
+                    while (roadTypes[j] == RoadNodeType.Tunnel && j < points.Count - 1)
                     {
                         tunnelCount++;
                         j++;
                     }
 
-                    for (var k = startIdx; k < j; k++)
+                    var dist = Vector3.Distance(points[startIdx], points[j]);
+                    // Magic number for the best distance between bridge nodes
+                    var tunnelNodes = (int)(dist / 10);
+                    for (var k = 0; k <= tunnelNodes; k++)
                     {
-                        newPoints.Add(points[k]);
-                        newNormals.Add(normals[k]);
-                        newTangents.Add(points[j] - points[startIdx]);
+                        newPoints.Add(Vector3.Lerp(points[startIdx], points[j], (float)k / tunnelNodes));
+                        newNormals.Add(Vector3.up);
+                        if (k == 0)
+                            newTangents.Add(newTangents[^1]);
+                        else
+                            newTangents.Add(points[j] - points[startIdx]);
                         newRoadTypes.Add(RoadNodeType.Tunnel);
+                    }
+
+                    j--;
+                }
+                else if (roadTypes[j] == RoadNodeType.Bridge)
+                {
+                    var bridgeCount = 0;
+                    var startIdx = j;
+
+                    while (roadTypes[j] == RoadNodeType.Bridge)
+                    {
+                        bridgeCount++;
+                        j++;
+                    }
+
+                    var dist = Vector3.Distance(points[startIdx], points[j]);
+                    // Magic number for the best distance between bridge nodes
+                    var bridgeNodes = (int)(dist / 50);
+                    for (var k = 0; k <= bridgeNodes; k++)
+                    {
+                        newPoints.Add(Vector3.Lerp(points[startIdx], points[j], (float)k / bridgeNodes));
+                        newNormals.Add(Vector3.up);
+                        newTangents.Add(points[j] - points[startIdx]);
+                        newRoadTypes.Add(RoadNodeType.Bridge);
                     }
 
                     j--;
                 }
                 else
                 {
+                    if (roadTypes[j - 1] == RoadNodeType.Tunnel) continue;
+
                     var p0 = points[j];
                     var p1 = 0.5f * (-points[j - 1] + points[j + 1]);
                     var p2 = 0.5f * (2 * points[j - 1] - 5 * points[j] + 4 * points[j + 1] - points[j + 2]);
@@ -287,39 +374,51 @@ namespace Roads
         {
             var roadMesh = PrefabUtility.LoadPrefabContents("Assets/Resources/StraightRoad.prefab");
             var tunnelMesh = PrefabUtility.LoadPrefabContents("Assets/Resources/Tunnel.prefab");
+            var bridgeMesh = PrefabUtility.LoadPrefabContents("Assets/Resources/Bridge.prefab");
 
             var roadSegments = new GameObject[points.Count - 1];
             var path = new Vector3[(points.Count - 1) * 2];
 
             for (var i = 0; i < points.Count - 1; i++)
+            {
                 if (roadNodeTypes[i] == RoadNodeType.Road)
-                {
                     roadSegments[i] = Instantiate(roadMesh);
-                    roadSegments[i].transform.position = points[i];
-                    roadSegments[i].transform.parent = transform;
+                else if (roadNodeTypes[i] == RoadNodeType.Bridge)
+                    roadSegments[i] = Instantiate(bridgeMesh);
+                else
+                    roadSegments[i] = Instantiate(tunnelMesh);
 
-                    roadSegments[i].GetComponent<MeshFilter>().sharedMesh = new Mesh();
+                roadSegments[i].transform.position = points[i];
+                roadSegments[i].transform.parent = transform;
+
+                roadSegments[i].GetComponent<MeshFilter>().sharedMesh = new Mesh();
+
+                if (roadNodeTypes[i] == RoadNodeType.Road)
                     roadSegments[i].GetComponent<MeshFilter>().sharedMesh =
                         Instantiate(roadMesh.GetComponent<MeshFilter>().sharedMesh);
-                    (path[i * 2], path[i * 2 + 1]) = DeformMesh(roadSegments[i], points[i], points[i + 1], tangents[i],
-                        tangents[i + 1], normals[i], normals[i + 1], roadNodeTypes[i]);
-                }
+                else if (roadNodeTypes[i] == RoadNodeType.Bridge)
+                    roadSegments[i].GetComponent<MeshFilter>().sharedMesh =
+                        Instantiate(bridgeMesh.GetComponent<MeshFilter>().sharedMesh);
                 else
-                {
-                    roadSegments[i] = Instantiate(tunnelMesh);
-                    roadSegments[i].transform.position = points[i];
-                    roadSegments[i].transform.parent = transform;
-
-                    roadSegments[i].GetComponent<MeshFilter>().sharedMesh = new Mesh();
                     roadSegments[i].GetComponent<MeshFilter>().sharedMesh =
                         Instantiate(tunnelMesh.GetComponent<MeshFilter>().sharedMesh);
-                    (path[i * 2], path[i * 2 + 1]) = DeformMesh(roadSegments[i], points[i], points[i + 1], tangents[i],
-                        tangents[i + 1], normals[i], normals[i + 1], roadNodeTypes[i]);
-                    if (roadSegments[i].transform.position == Vector3.zero)
-                        throw new Exception("Tunnel coordinate is zero!");
-                }
 
-            combineMeshes(roadSegments);
+                (path[i * 2], path[i * 2 + 1]) = DeformMesh(roadSegments[i], points[i], points[i + 1], tangents[i],
+                    tangents[i + 1], normals[i], normals[i + 1], roadNodeTypes[i]);
+            }
+
+            var hasBeenAdjusted = new bool[_backupHeights.GetLength(0), _backupHeights.GetLength(1)];
+            var terrainData = terrain.GetComponent<UnityEngine.Terrain>().terrainData;
+
+            for (var i = 0; i < points.Count - 2; i++)
+                if (roadNodeTypes[i] == RoadNodeType.Road)
+                    (adjustedHeightMap, hasBeenAdjusted) = mapTerrainToRoad(terrainData, adjustedHeightMap,
+                        hasBeenAdjusted, path[i * 2], path[i * 2 + 1], path[(i + 1) * 2],
+                        path[(i + 1) * 2 + 1]);
+
+            terrain.GetComponent<UnityEngine.Terrain>().terrainData.SetHeights(0, 0, adjustedHeightMap);
+
+            combineMeshes(roadSegments, roadNodeTypes);
 
             var endRoad = GetComponentsInChildren<Transform>()[3].GameObject();
 
@@ -332,8 +431,6 @@ namespace Roads
 
             endRoad.AddComponent<MeshCollider>();
             endRoad.GetComponent<MeshCollider>().sharedMesh = endRoad.GetComponent<MeshFilter>().sharedMesh;
-
-            mapTerrainToRoad(path, endRoad.GetComponent<MeshFilter>().sharedMesh);
         }
 
         private (Vector3, Vector3) DeformMesh(GameObject roadSegment, Vector3 start, Vector3 end, Vector3 tangentStart,
@@ -375,8 +472,8 @@ namespace Roads
             }
 
 
-            var startRotation = Quaternion.LookRotation(tangentStart, normalStart);
-            var endRotation = Quaternion.LookRotation(tangentEnd, normalEnd);
+            var startRotation = Quaternion.LookRotation(tangentStart, Vector3.up);
+            var endRotation = Quaternion.LookRotation(tangentEnd, Vector3.up);
 
             for (var i = 0; i < vertices.Length; i++)
             {
@@ -384,6 +481,12 @@ namespace Roads
                 {
                     vertices[i].x *= 0.6f;
                     vertices[i].y *= 0.6f;
+                }
+
+                if (roadNodeType == RoadNodeType.Bridge)
+                {
+                    vertices[i].x *= 1.75f;
+                    vertices[i].y *= 1.75f;
                 }
 
                 var vertex = vertices[i];
@@ -403,20 +506,56 @@ namespace Roads
             return (leftMostVector, rightMostVector);
         }
 
-        private void combineMeshes(GameObject[] targets)
+        private void combineMeshes(GameObject[] targets, List<RoadNodeType> nodeTypes)
         {
-            var meshCount = targets[0].GetComponent<MeshFilter>().sharedMesh.subMeshCount;
+            var meshCount = 3;
+            var hasBridge = false;
+            var hasTunnel = false;
+            var numberOfRoads = 0;
+            var numberOfBridges = 0;
+            var numberOfTunnels = 0;
+
+            for (var i = 0; i < targets.Length; i++)
+                if (nodeTypes[i] == RoadNodeType.Tunnel)
+                {
+                    if (!hasTunnel)
+                    {
+                        meshCount += 1;
+                        hasTunnel = true;
+                    }
+
+                    numberOfTunnels += 1;
+                }
+                else if (nodeTypes[i] == RoadNodeType.Bridge)
+                {
+                    if (!hasBridge)
+                    {
+                        meshCount += 1;
+                        hasBridge = true;
+                    }
+
+                    numberOfBridges += 1;
+                }
+                else
+                {
+                    numberOfRoads += 1;
+                }
+
+            // number of roads need to be decreased by 1, because we don't need to combine the last road
+
             var resultingMeshes = new Mesh[meshCount];
-            for (var i = 0; i < meshCount; i++) resultingMeshes[i] = combineMeshesHelper(targets, i);
+            for (var i = 0; i < meshCount; i++)
+                resultingMeshes[i] = combineMeshesHelper(targets, i, nodeTypes, numberOfRoads, numberOfBridges,
+                    numberOfTunnels);
 
             var finalSegments = new GameObject[meshCount];
             for (var i = 0; i < meshCount; i++)
             {
-                finalSegments[i] = Instantiate(targets[0]);
+                finalSegments[i] = Instantiate(targets[i]);
                 finalSegments[i].transform.parent = transform;
                 finalSegments[i].GetComponent<MeshFilter>().sharedMesh = new Mesh();
                 finalSegments[i].transform.position = new Vector3(0, 0, 0);
-                finalSegments[i].GetComponent<MeshFilter>().sharedMesh.subMeshCount = 3;
+                finalSegments[i].GetComponent<MeshFilter>().sharedMesh.subMeshCount = meshCount;
 
                 finalSegments[i].GetComponent<MeshFilter>().sharedMesh = resultingMeshes[i];
                 finalSegments[i].GetComponent<MeshFilter>().sharedMesh.RecalculateBounds();
@@ -442,146 +581,195 @@ namespace Roads
 
             endRoad.transform.parent = transform;
             endRoad.GetComponent<MeshFilter>().sharedMesh = new Mesh();
+            endRoad.GetComponent<MeshFilter>().sharedMesh.indexFormat = IndexFormat.UInt32;
             endRoad.GetComponent<MeshFilter>().sharedMesh.CombineMeshes(combine, false);
 
             endRoad.GetComponent<MeshRenderer>().sharedMaterials =
                 finalSegments[0].GetComponent<MeshRenderer>().sharedMaterials;
+
+            if (hasBridge)
+            {
+                var materials = new Material[endRoad.GetComponent<MeshRenderer>().sharedMaterials.Length + 1];
+                endRoad.GetComponent<MeshRenderer>().sharedMaterials.CopyTo(materials, 0);
+                materials[^1] = endRoad.GetComponent<MeshRenderer>().sharedMaterials[0];
+                endRoad.GetComponent<MeshRenderer>().sharedMaterials = materials;
+            }
+
+            if (hasTunnel)
+            {
+                var materials = new Material[endRoad.GetComponent<MeshRenderer>().sharedMaterials.Length + 1];
+                endRoad.GetComponent<MeshRenderer>().sharedMaterials.CopyTo(materials, 0);
+                materials[^1] = endRoad.GetComponent<MeshRenderer>().sharedMaterials[1];
+                endRoad.GetComponent<MeshRenderer>().sharedMaterials = materials;
+            }
+
             endRoad.transform.name = "Road";
 
             endRoad.GetComponent<MeshFilter>().sharedMesh.RecalculateBounds();
             endRoad.GetComponent<MeshFilter>().sharedMesh.RecalculateNormals();
             endRoad.GetComponent<MeshFilter>().sharedMesh.RecalculateTangents();
 
+            endRoad.tag = "Road";
+
             for (var i = 0; i < meshCount; i++) DestroyImmediate(finalSegments[i]);
         }
 
-        private Mesh combineMeshesHelper(GameObject[] targets, int index)
+        private Mesh combineMeshesHelper(GameObject[] targets, int index, List<RoadNodeType> nodeTypes,
+            int numberOfRoads, int numberOfBridges, int numberOfTunnels)
         {
-            var combine = new CombineInstance[targets.Length];
-            for (var i = targets.Length - 1; i >= 0; i--)
+            var combineLength = 0;
+            var roadType = RoadNodeType.Road;
+            switch (index)
             {
-                combine[i].mesh = targets[i].GetComponent<MeshFilter>().sharedMesh;
-                combine[i].transform = targets[i].transform.localToWorldMatrix;
-                combine[i].subMeshIndex = index;
+                case 0:
+                    combineLength = numberOfRoads;
+                    break;
+                case 1:
+                    combineLength = numberOfRoads;
+                    break;
+                case 2:
+                    combineLength = numberOfRoads;
+                    break;
+                case 3:
+                    if (numberOfBridges == 0)
+                    {
+                        combineLength = numberOfTunnels;
+                        roadType = RoadNodeType.Tunnel;
+                        break;
+                    }
+
+                    combineLength = numberOfBridges;
+                    roadType = RoadNodeType.Bridge;
+                    break;
+                case 4:
+                    combineLength = numberOfTunnels;
+                    roadType = RoadNodeType.Tunnel;
+                    break;
+            }
+
+            var combine = new CombineInstance[combineLength];
+
+            var idx = 0;
+
+            var roadCount = 0;
+            for (var i = 0; i < targets.Length - 1; i++)
+            {
+                if (nodeTypes[i] != roadType) continue;
+                roadCount++;
+            }
+
+            for (var i = 0; i < targets.Length - 1; i++)
+            {
+                if (nodeTypes[i] != roadType) continue;
+                if (roadType == RoadNodeType.Road)
+                    combine[idx].subMeshIndex = index;
+                combine[idx].mesh = targets[i].GetComponent<MeshFilter>().sharedMesh;
+                combine[idx++].transform = targets[i].transform.localToWorldMatrix;
             }
 
             var returnMesh = new Mesh();
+            returnMesh.indexFormat = IndexFormat.UInt32;
             returnMesh.CombineMeshes(combine);
             return returnMesh;
         }
 
-        private void mapTerrainToRoad(Vector3[] path, Mesh roadMesh)
+        private (float[,], bool[,]) mapTerrainToRoad(TerrainData terrainData, float[,] oldHeightMap,
+            bool[,] hasBeenAdjusted, Vector3 worldPrevLeft, Vector3 worldPrevRight, Vector3 worldLeft,
+            Vector3 worldRight)
         {
-            var ter = terrain.GetComponent<UnityEngine.Terrain>();
-            var terrainData = ter.terrainData;
             var terrainSize = terrainData.size;
             var terrainHeight = terrainData.heightmapResolution;
             var terrainWidth = terrainData.heightmapResolution;
-            var terrainHeightData = terrainData.GetHeights(0, 0, terrainWidth, terrainHeight);
             var radius = 10;
             var epsilon = 2f;
+            var terrainHeightData = oldHeightMap;
 
-            // Adjust the terrain for the first points in the path
-            var prevLeft = terrain.transform.InverseTransformPoint(path[0]);
-            var prevRight = terrain.transform.InverseTransformPoint(path[1]);
+            // Transform the world coordinates to local coordinates
+            var prevLeft = terrain.transform.InverseTransformPoint(worldPrevLeft);
+            var prevRight = terrain.transform.InverseTransformPoint(worldPrevRight);
+            var left = terrain.transform.InverseTransformPoint(worldLeft);
+            var right = terrain.transform.InverseTransformPoint(worldRight);
 
-            var prevLeft2D = new Vector2(prevLeft.x, prevLeft.z);
-            var prevRight2D = new Vector2(prevRight.x, prevRight.z);
+            // Create a bool array that checks if terrain was already adjusted
+            var terrainAdjusted = hasBeenAdjusted;
 
-            // Create a float array that checks if terrain was already adjusted
-            var terrainAdjusted = new bool[terrainWidth, terrainHeight];
+            var maxX = (int)Mathf.Ceil(Mathf.Max(left.x, right.x, prevLeft.x, prevRight.x)) + radius;
+            var minX = (int)Mathf.Floor(Mathf.Min(left.x, right.x, prevLeft.x, prevRight.x)) - radius;
+            var maxZ = (int)Mathf.Ceil(Mathf.Max(left.z, right.z, prevLeft.z, prevRight.z)) + radius;
+            var minZ = (int)Mathf.Floor(Mathf.Min(left.z, right.z, prevLeft.z, prevRight.z)) - radius;
 
-            for (var i = 1; i < path.Length / 2; i++)
+            // Transform to world coordinates
+            maxX = (int)(maxX / terrainSize.x * terrainWidth);
+            minX = (int)(minX / terrainSize.x * terrainWidth);
+            maxZ = (int)(maxZ / terrainSize.z * terrainHeight);
+            minZ = (int)(minZ / terrainSize.z * terrainHeight);
+
+            // Creating a Triangle from most leftX to prevLeftX to prevRightX and from leftX to prevRightX to rightX
+            // and then adjusting the terrain height for each point in the triangle
+            var areaOne = CalcDetTriangle2D(left, prevLeft, prevRight);
+            var areaTwo = CalcDetTriangle2D(left, prevRight, right);
+
+            var averageHeight = (left.y + prevLeft.y + right.y + prevRight.y) / 4;
+            var maxDist = new Vector2(maxX - minX, maxZ - minZ).magnitude;
+
+            for (var j = minX; j <= maxX; j++)
+            for (var k = minZ; k <= maxZ; k++)
             {
-                var left = terrain.transform.InverseTransformPoint(path[i * 2]);
-                var right = terrain.transform.InverseTransformPoint(path[i * 2 + 1]);
-
-                var maxX = (int)Mathf.Ceil(Mathf.Max(left.x, right.x, prevLeft.x, prevRight.x)) + radius;
-                var minX = (int)Mathf.Floor(Mathf.Min(left.x, right.x, prevLeft.x, prevRight.x)) - radius;
-                var maxZ = (int)Mathf.Ceil(Mathf.Max(left.z, right.z, prevLeft.z, prevRight.z)) + radius;
-                var minZ = (int)Mathf.Floor(Mathf.Min(left.z, right.z, prevLeft.z, prevRight.z)) - radius;
-
-                // Transform to terrain coordinates
-                maxX = (int)(maxX / terrainSize.x * terrainWidth);
-                minX = (int)(minX / terrainSize.x * terrainWidth);
-                maxZ = (int)(maxZ / terrainSize.z * terrainHeight);
-                minZ = (int)(minZ / terrainSize.z * terrainHeight);
-
-                var left2D = new Vector2(left.x, left.z);
-                var right2D = new Vector2(right.x, right.z);
-
-                // Creating a Triangle from most leftX to prevLeftX to prevRightX and from leftX to prevRightX to rightX
-                // and then adjusting the terrain height for each point in the triangle
-                var areaOne = CalcDetTriangle2D(left, prevLeft, prevRight);
-                var areaTwo = CalcDetTriangle2D(left, prevRight, right);
-
-                var averageHeight = (left.y + prevLeft.y + right.y + prevRight.y) / 4;
-                var maxDist = new Vector2(maxX - minX, maxZ - minZ).magnitude;
-
-                for (var j = minX; j <= maxX; j++)
-                for (var k = minZ; k <= maxZ; k++)
+                var worldX = (int)((float)j / terrainWidth * terrainSize.x);
+                var worldZ = (int)((float)k / terrainHeight * terrainSize.z);
+                for (var wigX = -1; wigX <= 1; wigX++)
+                for (var wigZ = -1; wigZ <= 1; wigZ++)
                 {
-                    var worldX = (int)((float)j / terrainWidth * terrainSize.x);
-                    var worldZ = (int)((float)k / terrainHeight * terrainSize.z);
-                    for (var wigX = -1; wigX <= 1; wigX++)
-                    for (var wigZ = -1; wigZ <= 1; wigZ++)
-                    {
-                        var point = new Vector2(worldX + wigX, worldZ + wigZ);
+                    var point = new Vector2(worldX + wigX, worldZ + wigZ);
 
-                        var Bary1 = CalcBary1(prevLeft, prevRight, point) / areaOne;
-                        if (Bary1 <= 1f && Bary1 >= 0f)
+                    var bary1 = CalcBary1(prevLeft, prevRight, point) / areaOne;
+                    if (bary1 <= 1f && bary1 >= 0f)
+                    {
+                        var bary2 = CalcBary2(left, prevRight, point) / areaOne;
+                        if (bary2 <= 1f && bary1 + bary2 <= 1f && bary2 >= 0f)
                         {
-                            var Bary2 = CalcBary2(left, prevRight, point) / areaOne;
-                            if (Bary2 <= 1f && Bary1 + Bary2 <= 1f && Bary2 >= 0f)
+                            var bary3 = 1 - bary1 - bary2;
+                            var y = bary1 * left.y + bary2 * prevLeft.y + bary3 * prevRight.y;
+
+                            terrainHeightData[k, j] = (y - epsilon) / terrainSize.y;
+                            terrainAdjusted[k, j] = true;
+                            break;
+                        }
+                    }
+                    else
+                    {
+                        var bary4 = CalcBary1(prevRight, right, point) / areaTwo;
+                        if (bary4 <= 1f && bary4 >= 0f)
+                        {
+                            var bary5 = CalcBary2(left, right, point) / areaTwo;
+                            if (bary5 <= 1f && bary4 + bary5 <= 1f && bary5 >= 0f)
                             {
-                                var Bary3 = 1 - Bary1 - Bary2;
-                                var y = Bary1 * left.y + Bary2 * prevLeft.y + Bary3 * prevRight.y;
+                                var bary6 = 1 - bary5 - bary4;
+                                var y = bary4 * left.y + bary5 * prevRight.y + bary6 * right.y;
 
                                 terrainHeightData[k, j] = (y - epsilon) / terrainSize.y;
                                 terrainAdjusted[k, j] = true;
                                 break;
                             }
                         }
-                        else
-                        {
-                            var Bary4 = CalcBary1(prevRight, right, point) / areaTwo;
-                            if (Bary4 <= 1f && Bary4 >= 0f)
-                            {
-                                var Bary5 = CalcBary2(left, right, point) / areaTwo;
-                                if (Bary5 <= 1f && Bary4 + Bary5 <= 1f && Bary5 >= 0f)
-                                {
-                                    var Bary6 = 1 - Bary5 - Bary4;
-                                    var y = Bary4 * left.y + Bary5 * prevRight.y + Bary6 * right.y;
-
-                                    terrainHeightData[k, j] = (y - epsilon) / terrainSize.y;
-                                    terrainAdjusted[k, j] = true;
-                                    break;
-                                }
-                            }
-                        }
-                    }
-
-                    if (!terrainAdjusted[k, j])
-                    {
-                        var curHeight = terrainHeightData[k, j];
-
-                        var distX = Mathf.Min(j - minX, maxX - j);
-                        var distZ = Mathf.Min(k - minZ, maxZ - k);
-                        var dist = Mathf.Min(distX, distZ);
-                        var weight = dist / maxDist;
-
-                        terrainHeightData[k, j] = Mathf.Lerp(curHeight, (averageHeight - epsilon) / terrainSize.y,
-                            dist / maxDist);
                     }
                 }
 
-                prevLeft = left;
-                prevRight = right;
-                prevLeft2D = left2D;
-                prevRight2D = right2D;
+                if (!terrainAdjusted[k, j])
+                {
+                    var curHeight = terrainHeightData[k, j];
+
+                    var distX = Mathf.Min(j - minX, maxX - j);
+                    var distZ = Mathf.Min(k - minZ, maxZ - k);
+                    var dist = Mathf.Min(distX, distZ);
+                    var weight = dist / maxDist;
+
+                    terrainHeightData[k, j] = Mathf.Lerp(curHeight, (averageHeight - epsilon) / terrainSize.y,
+                        dist / maxDist);
+                }
             }
 
-            ter.terrainData.SetHeights(0, 0, terrainHeightData);
+            return (terrainHeightData, terrainAdjusted);
         }
 
         private float CalcDetTriangle2D(Vector3 firstVec, Vector3 secondVec, Vector3 thirdVec)

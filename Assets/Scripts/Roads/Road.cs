@@ -93,71 +93,6 @@ namespace Roads
                     swap(i, i - 1);
                 else
                     break;
-
-            /*
-        int currentIndex = -1;
-        bool isSmaller;
-        int nextIndex = 0;
-        bool isAlreadyInHeap = false;
-        for (int i = 0; i < lastIndex; i++)
-        {
-            if (elements[i] == idx)
-            {
-                currentIndex = i;
-                isAlreadyInHeap = true;
-                dist[i] = _dist;
-                break;
-            }
-        }
-        if (!isAlreadyInHeap)
-        {
-            elements[lastIndex] = idx;
-            dist[lastIndex] = _dist;
-            currentIndex = lastIndex;
-            if (lastIndex % 2 == 0 && currentIndex !=0)
-            {
-                nextIndex = currentIndex / 2 - 1;
-                isSmaller = dist[nextIndex] > dist[currentIndex];
-            }
-            else
-            {
-                nextIndex = currentIndex / 2;
-                isSmaller = dist[nextIndex] > dist[currentIndex];
-            }
-            lastIndex++;
-        }
-        else
-        {
-            if (currentIndex % 2 == 0 && currentIndex != 0)
-            {
-                nextIndex = currentIndex / 2 - 1;
-                isSmaller = dist[nextIndex] > dist[currentIndex];
-            }
-            else
-            {
-                nextIndex = currentIndex / 2;
-                isSmaller = dist[nextIndex] > dist[currentIndex];
-            }
-
-        }
-        while (currentIndex != 0 && isSmaller)
-        {
-            // c# apperently has no swap method
-            int tempIdx = elements[nextIndex];
-            float tempDist = dist[nextIndex];
-            elements[nextIndex] = elements[currentIndex];
-            dist[nextIndex] = dist[currentIndex];
-            elements[currentIndex] = tempIdx;
-            dist[currentIndex] = tempDist;
-
-            currentIndex = nextIndex;
-            nextIndex = currentIndex / 2 - 1;
-            if(nextIndex == -1)
-            {
-                break;
-            }
-            isSmaller = dist[nextIndex] > dist[currentIndex];
-        }*/
         }
 
         public int pop()
@@ -166,32 +101,6 @@ namespace Roads
             for (var i = 0; i < lastIndex - 1; i++) swap(i, i + 1);
             lastIndex--;
             return firstElement;
-            /*int firstElement =  elements[0];
-
-        int currentIdx = 0;
-
-        while (true)
-        {
-            if(currentIdx * 2 + 1 > lastIndex || currentIdx * 2 + 2 > lastIndex)
-            {
-                break;
-            }
-            if (dist[currentIdx * 2 + 1] < dist[currentIdx * 2 + 2])
-            {
-                dist[currentIdx] = dist[currentIdx * 2 + 1];
-                elements[currentIdx] = elements[currentIdx * 2 + 1];
-                currentIdx = currentIdx * 2 + 1;
-            }
-            else
-            {
-                dist[currentIdx] = dist[currentIdx * 2 + 2];
-                elements[currentIdx] = elements[currentIdx * 2 + 2];
-                currentIdx = currentIdx * 2 + 2;
-            }
-        }
-        lastIndex--;
-        popcount++;
-        return firstElement;*/
         }
 
         public float allElementsBigger(float _dist)
@@ -334,19 +243,22 @@ namespace Roads
 
     public class Road : MonoBehaviour
     {
+        private readonly bool allowBridges;
+        private readonly bool allowTunnels;
         private readonly GridBounds gridBounds;
         private readonly int gridSize;
         private readonly int innerRadius;
         private readonly TerrainCollider MyMeshCollider;
         private readonly Vector2 offset;
         private readonly int outerRadius;
+        private readonly bool restrictCurvature;
         private readonly int stepLength;
         private Vector2Int endingPosition;
         public RoadNode[] nodes;
         private Vector2Int startingPosition;
 
         public Road(Vector2Int start, Vector2Int end, int _bounds, int _innerRadius, int _outerRadius, int _stepLength,
-            Vector2 _offset)
+            Vector2 _offset, bool _allowBridges, bool _allowTunnels, bool _restrictCurvature)
         {
             gridSize = _bounds / _stepLength;
             stepLength = _stepLength;
@@ -357,8 +269,12 @@ namespace Roads
             endingPosition = end;
             innerRadius = _innerRadius;
             outerRadius = _outerRadius;
+            allowBridges = _allowBridges;
+            allowTunnels = _allowTunnels;
+            restrictCurvature = _restrictCurvature;
+
             MyMeshCollider = FindObjectOfType<UnityEngine.Terrain>().GetComponent<TerrainCollider>();
-            var gridExpansion = Math.Max(1, 100 / stepLength);
+            var gridExpansion = Math.Max(1, 300 / stepLength);
             var lowerX = Math.Max(0, Math.Min(startingPosition.x, endingPosition.x) - gridExpansion);
             var upperX = Math.Min(gridSize - 1, Math.Max(startingPosition.x, endingPosition.x) + gridExpansion);
             var lowerZ = Math.Max(0, Math.Min(startingPosition.y, endingPosition.y) - gridExpansion);
@@ -397,6 +313,7 @@ namespace Roads
                         RaycastAtPosition(new Vector2(x * stepLength - offset.x, z * stepLength - offset.y));
                     nodes[index].idx = index;
                     nodes[index].predIdx = -1;
+                    nodes[index].dist = float.PositiveInfinity;
                 }
             }
         }
@@ -440,25 +357,18 @@ namespace Roads
             notVisited.push(startingPosition.y * gridSize + startingPosition.x, 0f);
             nodes[startingPosition.y * gridSize + startingPosition.x].dist = 0.0f;
 
-            // Initializing variables for the loop to save memory
-            int oldIndex;
             var count = 0;
-            int x;
-            int z;
-            Vector3 relativeDist;
-            float relativeHeight;
-            float roadDist;
-            float tunnelDist;
 
             while (notVisited.lastIndex > 0 && !visited[endingPosition.y * gridSize + endingPosition.x])
             {
-                oldIndex = notVisited.pop();
+                if (count > 100000) throw new Exception("Too many iterations");
+                var oldIndex = notVisited.pop();
                 if (!nodes[oldIndex].isValid) continue;
                 for (var i = -outerRadius; i <= outerRadius; ++i)
                 for (var j = -outerRadius; j <= outerRadius; ++j)
                 {
-                    x = oldIndex % gridSize + i;
-                    z = oldIndex / gridSize + j;
+                    var x = oldIndex % gridSize + i;
+                    var z = oldIndex / gridSize + j;
 
                     if (x < 0 || x >= gridSize || z < 0 || z >= gridSize) continue;
 
@@ -468,15 +378,44 @@ namespace Roads
 
                     if (Math.Abs(i) <= innerRadius && Math.Abs(j) <= innerRadius) continue;
 
-                    relativeDist = nodes[index].pos - nodes[oldIndex].pos;
-                    relativeHeight = nodes[index].mapHeight - nodes[oldIndex].mapHeight;
+                    var relativeDist = nodes[index].pos - nodes[oldIndex].pos;
+                    var relativeHeight = nodes[index].mapHeight - nodes[oldIndex].mapHeight;
 
                     var direction = new Vector3(relativeDist.x, relativeHeight, relativeDist.z).normalized;
 
-                    roadDist = nodes[oldIndex].dist + evalSlope(direction) * relativeDist.sqrMagnitude;
-                    tunnelDist = nodes[oldIndex].dist + evalTunnel(relativeHeight) * relativeDist.sqrMagnitude;
+                    var roadDist = 0f;
+                    var tunnelDist = 0f;
+                    var bridgeDist = 0f;
 
-                    if (roadDist < nodes[index].dist && roadDist < tunnelDist)
+                    tunnelDist = nodes[oldIndex].dist +
+                                 evalTunnel(relativeHeight, nodes[oldIndex].roadType) * relativeDist.sqrMagnitude;
+                    bridgeDist = nodes[oldIndex].dist +
+                                 evalBridge(nodes[index].mapHeight, relativeHeight) * relativeDist.sqrMagnitude;
+
+                    if (!restrictCurvature)
+                    {
+                        roadDist = nodes[oldIndex].dist + evalSlope(direction) *
+                            EvalHeightRoad(nodes[index].mapHeight) *
+                            relativeDist.sqrMagnitude;
+                    }
+                    else
+                    {
+                        if (nodes[oldIndex].predIdx != -1)
+                        {
+                            var oldDirection = nodes[oldIndex].pos - nodes[nodes[oldIndex].predIdx].pos;
+                            roadDist = nodes[oldIndex].dist + evalSlope(direction) *
+                                EvalHeightRoad(nodes[index].mapHeight) * EvalCurvature(oldDirection, direction) *
+                                relativeDist.sqrMagnitude;
+                        }
+                        else
+                        {
+                            roadDist = nodes[oldIndex].dist + evalSlope(direction) *
+                                EvalHeightRoad(nodes[index].mapHeight) *
+                                relativeDist.sqrMagnitude;
+                        }
+                    }
+
+                    if (roadDist < nodes[index].dist && roadDist < tunnelDist && roadDist < bridgeDist)
                     {
                         nodes[index].dist = roadDist;
                         nodes[index].predIdx = oldIndex;
@@ -485,18 +424,25 @@ namespace Roads
                     }
                     else
                     {
-                        if (tunnelDist < nodes[index].dist)
+                        if (tunnelDist < nodes[index].dist && tunnelDist < bridgeDist)
                         {
                             nodes[index].dist = tunnelDist;
                             nodes[index].predIdx = oldIndex;
                             notVisited.push(index, tunnelDist);
                             nodes[index].roadType = RoadNodeType.Tunnel;
                         }
+                        else if (bridgeDist < nodes[index].dist)
+                        {
+                            nodes[index].dist = bridgeDist;
+                            nodes[index].predIdx = oldIndex;
+                            notVisited.push(index, bridgeDist);
+                            nodes[index].roadType = RoadNodeType.Bridge;
+                        }
                     }
                 }
 
-                visited[oldIndex] = true;
                 count++;
+                visited[oldIndex] = true;
             }
 
             if (nodes[endingPosition.y * gridSize + endingPosition.x].predIdx == -1)
@@ -507,26 +453,49 @@ namespace Roads
             nodes[endingPosition.y * gridSize + endingPosition.x].roadType = RoadNodeType.Road;
         }
 
+        private float EvalHeightRoad(float height)
+        {
+            if (height <= 24 || height >= 200) return float.PositiveInfinity;
+            return 1;
+        }
+
         private float evalSlope(Vector3 dirVec)
         {
             dirVec.y = Mathf.Abs(dirVec.y);
             dirVec.Normalize();
 
             // If the slope is above 30 degrees we do not want a path going up there (or down there)
-            if (dirVec.y > 0.5f)
+            if (dirVec.y > 0.35f)
                 return float.PositiveInfinity;
             return 1 + dirVec.y * 10;
         }
 
-        private float evalTunnel(float height)
+        private float evalTunnel(float height, RoadNodeType roadTypePrevNode)
         {
+            if (!allowTunnels) return float.PositiveInfinity;
             height = Mathf.Abs(height);
-            if (height < 3f) return float.PositiveInfinity;
-            if (height < 8f)
-                return height * 0.5f;
-            if (height <= 15f)
-                return 4f + (height - 8f) * 0.25f;
+            if (height < 7f && roadTypePrevNode != RoadNodeType.Tunnel) return float.PositiveInfinity;
+            if (height >= 10f)
+                return 20 + height;
+            if (height >= 20f)
+                return float.PositiveInfinity;
             return float.PositiveInfinity;
+        }
+
+        private float evalBridge(float height, float relativeHeight)
+        {
+            if (!allowBridges) return float.PositiveInfinity;
+            if (height > 24f) return float.PositiveInfinity;
+            height = Mathf.Abs(relativeHeight);
+            return Mathf.Abs(relativeHeight) * 0.5f;
+        }
+
+        private float EvalCurvature(Vector3 dirVec, Vector3 nextDirVec)
+        {
+            var angle = Vector3.Angle(dirVec, nextDirVec);
+            if (angle > 30f)
+                return float.PositiveInfinity;
+            return 1 + angle * 0.01f;
         }
     }
 }
