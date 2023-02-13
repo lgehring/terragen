@@ -51,8 +51,8 @@ namespace Roads
         /// <exception cref="ArgumentException"> Throws an exception if the road has to many nodes </exception>
         public void DrawRoadMesh()
         {
-            _startingPoints.Clear();
-            _endPoints.Clear();
+            _startingPoints = new List<GameObject>();
+            _endPoints = new List<GameObject>();
             if (map == null)
                 throw new ArgumentException("The map is null");
             if (terrain == null)
@@ -480,9 +480,8 @@ namespace Roads
                     zMin = vertex.z;
             }
 
-
             var startRotation = Quaternion.LookRotation(tangentStart, Vector3.up);
-            var endRotation = Quaternion.LookRotation(tangentEnd, Vector3.up);
+            var endRotation =   Quaternion.LookRotation(tangentEnd, Vector3.up);
 
             for (var i = 0; i < vertices.Length; i++)
             {

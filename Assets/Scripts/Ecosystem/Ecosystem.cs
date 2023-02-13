@@ -357,13 +357,14 @@ namespace Ecosystem
             var normal = Vector3.zero;
             var ray = new Ray(new Vector3(position.x, maxHeight, position.y), Vector3.down);
 
-            // Do not place plants on roads
-            if (_roadCollider.Raycast(ray, out var hit1, maxHeight))
-                return (height, normal);
-            
-
             if (!_terrainCollider.Raycast(ray, out var hit, maxHeight))
                 return (height, normal);
+
+            // Do not place plants on roads
+            if (_roadCollider.Raycast(ray, out var hit1, maxHeight))
+                if (hit1.point.y >= hit.point.y)
+                    return (height, normal);
+
             height = hit.point.y;
             normal = hit.normal;
 
