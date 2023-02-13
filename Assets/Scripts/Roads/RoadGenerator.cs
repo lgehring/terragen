@@ -224,6 +224,7 @@ namespace Roads
 
                 (path, normals, tangents, roadTypes) = generateSpline(path, normals, tangents, roadTypes);
                 generateRoadMesh(path, normals, tangents, roadTypes);
+                terrain.GetComponent<UnityEngine.Terrain>().terrainData.SetHeights(0, 0, adjustedHeightMap);
             }
 
             var roadChildren = new List<GameObject>();
@@ -238,10 +239,12 @@ namespace Roads
             for (var i = 0; i < roadChildren.Count; i++)
                 numberOfSubMeshes += roadChildren[i].GetComponent<MeshFilter>().sharedMesh.subMeshCount;
             var combine = new CombineInstance[numberOfSubMeshes];
+            var materials = new Material[numberOfSubMeshes];
             var meshCount = 0;
             for (var i = 0; i < roadChildren.Count; i++)
             for (var j = 0; j < roadChildren[i].GetComponent<MeshFilter>().sharedMesh.subMeshCount; j++)
             {
+                materials[meshCount] = roadChildren[i].GetComponent<MeshRenderer>().sharedMaterials[j];
                 combine[meshCount].subMeshIndex = j;
                 combine[meshCount].mesh = roadChildren[i].GetComponent<MeshFilter>().sharedMesh;
                 combine[meshCount++].transform = roadChildren[i].transform.localToWorldMatrix;
@@ -249,6 +252,14 @@ namespace Roads
 
             allRoads.GetComponent<MeshFilter>().sharedMesh = new Mesh();
             allRoads.GetComponent<MeshFilter>().sharedMesh.CombineMeshes(combine, false);
+            allRoads.GetComponent<MeshRenderer>().sharedMaterials = materials;
+            allRoads.AddComponent<MeshCollider>();
+            allRoads.AddComponent<MeshCollider>().sharedMesh = allRoads.GetComponent<MeshFilter>().sharedMesh;
+            allRoads.tag = "Finished Road";
+
+            for (var i = 0; i < roadChildren.Count; i++)
+                if (roadChildren[i].tag != "Finished Road")
+                    DestroyImmediate(roadChildren[i]);
         }
 
         private (List<Vector3>, List<Vector3>, List<Vector3>, List<RoadNodeType>) generateSpline(List<Vector3> points,
@@ -415,8 +426,6 @@ namespace Roads
                     (adjustedHeightMap, hasBeenAdjusted) = mapTerrainToRoad(terrainData, adjustedHeightMap,
                         hasBeenAdjusted, path[i * 2], path[i * 2 + 1], path[(i + 1) * 2],
                         path[(i + 1) * 2 + 1]);
-
-            terrain.GetComponent<UnityEngine.Terrain>().terrainData.SetHeights(0, 0, adjustedHeightMap);
 
             combineMeshes(roadSegments, roadNodeTypes);
 

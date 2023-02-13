@@ -7,6 +7,7 @@ TagManager:
   - starting point
   - ending point
   - Road
+  - Finished Road
   layers:
   - Default
   - TransparentFX
