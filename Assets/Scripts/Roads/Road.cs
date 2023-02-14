@@ -455,7 +455,7 @@ namespace Roads
 
         private float EvalHeightRoad(float height)
         {
-            if (height <= 24 || height >= 200) return float.PositiveInfinity;
+            if (height <= 24 || height >= 1024) return float.PositiveInfinity;
             return 1;
         }
 
@@ -485,7 +485,7 @@ namespace Roads
         private float evalBridge(float height, float relativeHeight)
         {
             if (!allowBridges) return float.PositiveInfinity;
-            if (height > 24f) return float.PositiveInfinity;
+            if (height > 137f) return float.PositiveInfinity;
             height = Mathf.Abs(relativeHeight);
             return Mathf.Abs(relativeHeight) * 0.5f;
         }
